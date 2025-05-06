@@ -32,10 +32,13 @@ export type DayMeals = {
 }
 
 export type UserSelection = {
+  id: string
   userId: string
   userName: string
   dayId: string
+  weekKey: string 
   mealId: string
+  createdAt: string 
 }
 
 // Fonction pour lire les données du fichier JSON

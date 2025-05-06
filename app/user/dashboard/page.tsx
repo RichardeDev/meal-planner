@@ -19,12 +19,16 @@ import {
   isThursdayOrLater,
 } from "@/lib/data"
 import { toast } from "sonner"
+import { getWeekNumber } from "@/lib/utils"
 
 export default function UserDashboard() {
   const [meals, setMeals] = useState<DayMeals[]>([])
   const [userSelections, setUserSelections] = useState<UserSelection[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [currentWeek, setCurrentWeek] = useState<number>(0) // 0 = semaine actuelle
+  const [currentWeek, setCurrentWeek] = useState<number>(() => {
+    const today = new Date()
+    return getWeekNumber(today)
+  }) 
 
   // Récupérer l'utilisateur depuis localStorage (côté client uniquement)
   const [user, setUser] = useState<{ id: string; name: string } | null>(null)
@@ -106,11 +110,18 @@ export default function UserDashboard() {
   }
 
   // Fonction pour naviguer entre les semaines
+  // const navigateWeek = (direction: number) => {
+  //   // Limiter la navigation entre 0 (semaine actuelle) et 1 (semaine prochaine)
+  //   const newWeek = Math.max(0, Math.min(1, currentWeek + direction))
+  //   setCurrentWeek(newWeek)
+  // }
   const navigateWeek = (direction: number) => {
-    // Limiter la navigation entre 0 (semaine actuelle) et 1 (semaine prochaine)
-    const newWeek = Math.max(0, Math.min(1, currentWeek + direction))
-    setCurrentWeek(newWeek)
+    const today = new Date()
+    const currentWeekNumber = getWeekNumber(today)
+    const targetWeekNumber = currentWeekNumber + direction
+    setCurrentWeek(targetWeekNumber)
   }
+  console.log("currentWeek:", currentWeek)  
 
   // Fonction pour obtenir le titre de la semaine
   const getWeekTitle = (weekOffset: number): string => {
@@ -136,7 +147,7 @@ export default function UserDashboard() {
     return (
       <div className="flex min-h-screen flex-col">
         <UserHeader />
-        <main className="flex-1 container py-6">
+        <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <div className="mb-6">
             <h1 className="text-3xl font-bold mb-2">Menu de la Semaine</h1>
             <p className="text-muted-foreground">Chargement des données...</p>

@@ -1,13 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { readData, updateData, type DayMeals } from "@/lib/json-utils"
+import { getWeekNumber } from "@/lib/utils"
 
 // GET /api/weekly-meals?weekOffset=0 - Récupérer les repas pour une semaine spécifique
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
-    const weekOffset = Number.parseInt(searchParams.get("weekOffset") || "0")
+    const weekNumber = Number.parseInt(searchParams.get("weekNumber") || "0")
+    if (!weekNumber || isNaN(weekNumber)) {
+      const today = new Date()
+      const weekNumberToday = getWeekNumber(today)
+      const weeklyMeals = await getWeeklyMealsForWeek(weekNumberToday)
+      return NextResponse.json(weeklyMeals)
+    }
 
-    const weeklyMeals = await getWeeklyMealsForWeek(weekOffset)
+    const weeklyMeals = await getWeeklyMealsForWeek(weekNumber)
     return NextResponse.json(weeklyMeals)
   } catch (error) {
     return NextResponse.json({ error: "Erreur lors de la récupération des repas de la semaine" }, { status: 500 })
@@ -100,21 +107,74 @@ const getWeekDates = (weekOffset = 0) => {
   }))
 }
 
+export const getWeekDatesWithYearAndNumber = (weekOffset = 0) => {
+  const today = new Date()
+  const day = today.getDay()
+  const diff = today.getDate() - day + (day === 1 ? 0 : day === 0 ? -6 : 1)
+
+  const monday = new Date(today)
+  monday.setDate(diff + weekOffset * 7)
+
+  const weekDays = []
+  for (let i = 0; i < 5; i++) {
+    const currentDate = new Date(monday)
+    currentDate.setDate(monday.getDate() + i)
+    weekDays.push({
+      name: ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"][i],
+      date: currentDate,
+    })
+  }
+
+  const weekNumber = getWeekNumber(weekDays[0].date)
+  const year = weekDays[0].date.getFullYear()
+
+  return {
+    weekDays: weekDays.map(w => ({
+      day: w.name,
+      date: w.date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" }),
+    })),
+    weekNumber,
+    year
+  }
+}
+
 // Generate weekly meals for a specific week
+// export async function generateWeeklyMeals(weekOffset = 0): Promise<DayMeals[]> {
+//   const weekDates = getWeekDates(weekOffset)
+//   const data = await readData()
+//   const meals = data.meals
+
+//   // Use a deterministic approach instead of random
+//   return weekDates.map((dayInfo, dayIndex) => {
+//     // Select meals based on day index instead of random
+//     const startIndex = (dayIndex * 2) % meals.length
+//     const dayMeals = [
+//       meals[startIndex % meals.length],
+//       meals[(startIndex + 1) % meals.length],
+//       meals[(startIndex + 2) % meals.length],
+//     ]
+
+//     return {
+//       day: dayInfo.day,
+//       date: dayInfo.date,
+//       meals: dayMeals,
+//     }
+//   })
+// }
+
 export async function generateWeeklyMeals(weekOffset = 0): Promise<DayMeals[]> {
-  const weekDates = getWeekDates(weekOffset)
+  const { weekDays } = getWeekDatesWithYearAndNumber(weekOffset)
   const data = await readData()
   const meals = data.meals
 
-  // Use a deterministic approach instead of random
-  return weekDates.map((dayInfo, dayIndex) => {
-    // Select meals based on day index instead of random
-    const startIndex = (dayIndex * 2) % meals.length
-    const dayMeals = [
-      meals[startIndex % meals.length],
-      meals[(startIndex + 1) % meals.length],
-      meals[(startIndex + 2) % meals.length],
-    ]
+  return weekDays.map((dayInfo, index) => {
+    const startIndex = (index * 2) % meals.length
+    const mealCount = 3
+    const dayMeals = []
+
+    for (let i = 0; i < mealCount; i++) {
+      dayMeals.push(meals[(startIndex + i) % meals.length])
+    }
 
     return {
       day: dayInfo.day,
@@ -125,25 +185,44 @@ export async function generateWeeklyMeals(weekOffset = 0): Promise<DayMeals[]> {
 }
 
 // Get weekly meals for a specific week
-export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
-  const data = await readData()
-  const weekOffsetStr = weekOffset.toString()
+// export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
+//   const data = await readData()
+//   const weekOffsetStr = weekOffset.toString()
 
-  // If we already have data for this week, return it
-  if (data.weeklyMealsStorage[weekOffsetStr]) {
-    return data.weeklyMealsStorage[weekOffsetStr]
+//   // If we already have data for this week, return it
+//   if (data.weeklyMealsStorage[weekOffsetStr]) {
+//     return data.weeklyMealsStorage[weekOffsetStr]
+//   }
+
+//   // Otherwise, generate new data
+//   const newWeeklyMeals = await generateWeeklyMeals(weekOffset)
+
+//   // Save to storage
+//   await updateData("weeklyMealsStorage", (storage) => {
+//     return {
+//       ...storage,
+//       [weekOffsetStr]: newWeeklyMeals,
+//     }
+//   })
+
+//   return newWeeklyMeals
+// }
+export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
+  const { weekNumber, year } = getWeekDatesWithYearAndNumber(weekOffset)
+  const key = `${year}-W${String(weekNumber).padStart(2, '0')}` // ex: "2025-W18"
+
+  const data = await readData()
+
+  if (data.weeklyMealsStorage[key]) {
+    return data.weeklyMealsStorage[key]
   }
 
-  // Otherwise, generate new data
   const newWeeklyMeals = await generateWeeklyMeals(weekOffset)
 
-  // Save to storage
-  await updateData("weeklyMealsStorage", (storage) => {
-    return {
-      ...storage,
-      [weekOffsetStr]: newWeeklyMeals,
-    }
-  })
+  await updateData("weeklyMealsStorage", (storage) => ({
+    ...storage,
+    [key]: newWeeklyMeals,
+  }))
 
   return newWeeklyMeals
 }

@@ -22,6 +22,7 @@ export default function LoginPage() {
 
     
     const user = await getUserByEmail(email);
+    console.log(user);
 
     if (user && user.role === "admin") {
       localStorage.setItem("user", JSON.stringify(user));

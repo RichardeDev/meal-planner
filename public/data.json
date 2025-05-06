@@ -84,7 +84,7 @@
     }
   ],
   "weeklyMealsStorage": {
-    "0": [
+    "2025-W14": [
       {
         "day": "Lundi",
         "date": "7 avril",
@@ -191,7 +191,7 @@
         ]
       }
     ],
-    "1": [
+    "2025-W15": [
       {
         "day": "Lundi",
         "date": "14 avril",
@@ -279,6 +279,220 @@
       {
         "day": "Vendredi",
         "date": "18 avril",
+        "meals": [
+          {
+            "id": "9",
+            "name": "Pizza Margherita",
+            "description": "Pizza avec tomate et mozzarella"
+          },
+          {
+            "id": "10",
+            "name": "Ratatouille",
+            "description": "Légumes mijotés à la provençale"
+          },
+          {
+            "id": "1",
+            "name": "Poulet rôti",
+            "description": "Poulet rôti avec pommes de terre"
+          }
+        ]
+      }
+    ],
+    "2025-W36": [
+      {
+        "day": "Lundi",
+        "date": "1 septembre",
+        "meals": [
+          {
+            "id": "1",
+            "name": "Poulet rôti",
+            "description": "Poulet rôti avec pommes de terre"
+          },
+          {
+            "id": "2",
+            "name": "Spaghetti Bolognaise",
+            "description": "Pâtes avec sauce tomate et viande hachée"
+          },
+          {
+            "id": "3",
+            "name": "Salade César",
+            "description": "Salade avec poulet, croûtons et parmesan"
+          }
+        ]
+      },
+      {
+        "day": "Mardi",
+        "date": "2 septembre",
+        "meals": [
+          {
+            "id": "3",
+            "name": "Salade César",
+            "description": "Salade avec poulet, croûtons et parmesan"
+          },
+          {
+            "id": "4",
+            "name": "Steak-frites",
+            "description": "Steak avec frites et salade"
+          },
+          {
+            "id": "5",
+            "name": "Poisson pané",
+            "description": "Poisson pané avec riz et légumes"
+          }
+        ]
+      },
+      {
+        "day": "Mercredi",
+        "date": "3 septembre",
+        "meals": [
+          {
+            "id": "5",
+            "name": "Poisson pané",
+            "description": "Poisson pané avec riz et légumes"
+          },
+          {
+            "id": "6",
+            "name": "Lasagnes",
+            "description": "Lasagnes à la viande et béchamel"
+          },
+          {
+            "id": "7",
+            "name": "Quiche Lorraine",
+            "description": "Quiche aux lardons et fromage"
+          }
+        ]
+      },
+      {
+        "day": "Jeudi",
+        "date": "4 septembre",
+        "meals": [
+          {
+            "id": "7",
+            "name": "Quiche Lorraine",
+            "description": "Quiche aux lardons et fromage"
+          },
+          {
+            "id": "8",
+            "name": "Couscous",
+            "description": "Couscous avec légumes et viande"
+          },
+          {
+            "id": "9",
+            "name": "Pizza Margherita",
+            "description": "Pizza avec tomate et mozzarella"
+          }
+        ]
+      },
+      {
+        "day": "Vendredi",
+        "date": "5 septembre",
+        "meals": [
+          {
+            "id": "9",
+            "name": "Pizza Margherita",
+            "description": "Pizza avec tomate et mozzarella"
+          },
+          {
+            "id": "10",
+            "name": "Ratatouille",
+            "description": "Légumes mijotés à la provençale"
+          },
+          {
+            "id": "1",
+            "name": "Poulet rôti",
+            "description": "Poulet rôti avec pommes de terre"
+          }
+        ]
+      }
+    ],
+    "2025-W34": [
+      {
+        "day": "Lundi",
+        "date": "25 août",
+        "meals": [
+          {
+            "id": "1",
+            "name": "Poulet rôti",
+            "description": "Poulet rôti avec pommes de terre"
+          },
+          {
+            "id": "2",
+            "name": "Spaghetti Bolognaise",
+            "description": "Pâtes avec sauce tomate et viande hachée"
+          },
+          {
+            "id": "3",
+            "name": "Salade César",
+            "description": "Salade avec poulet, croûtons et parmesan"
+          }
+        ]
+      },
+      {
+        "day": "Mardi",
+        "date": "26 août",
+        "meals": [
+          {
+            "id": "3",
+            "name": "Salade César",
+            "description": "Salade avec poulet, croûtons et parmesan"
+          },
+          {
+            "id": "4",
+            "name": "Steak-frites",
+            "description": "Steak avec frites et salade"
+          },
+          {
+            "id": "5",
+            "name": "Poisson pané",
+            "description": "Poisson pané avec riz et légumes"
+          }
+        ]
+      },
+      {
+        "day": "Mercredi",
+        "date": "27 août",
+        "meals": [
+          {
+            "id": "5",
+            "name": "Poisson pané",
+            "description": "Poisson pané avec riz et légumes"
+          },
+          {
+            "id": "6",
+            "name": "Lasagnes",
+            "description": "Lasagnes à la viande et béchamel"
+          },
+          {
+            "id": "7",
+            "name": "Quiche Lorraine",
+            "description": "Quiche aux lardons et fromage"
+          }
+        ]
+      },
+      {
+        "day": "Jeudi",
+        "date": "28 août",
+        "meals": [
+          {
+            "id": "7",
+            "name": "Quiche Lorraine",
+            "description": "Quiche aux lardons et fromage"
+          },
+          {
+            "id": "8",
+            "name": "Couscous",
+            "description": "Couscous avec légumes et viande"
+          },
+          {
+            "id": "9",
+            "name": "Pizza Margherita",
+            "description": "Pizza avec tomate et mozzarella"
+          }
+        ]
+      },
+      {
+        "day": "Vendredi",
+        "date": "29 août",
         "meals": [
           {
             "id": "9",

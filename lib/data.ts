@@ -1,10 +1,11 @@
 import type { User, Meal, DayMeals, UserSelection } from "@/lib/json-utils"
+import { getWeekNumber } from "./utils"
 
 // Fonctions d'API pour les utilisateurs
 export async function getUserByEmail(email: string): Promise<User | undefined> {
   try {
-    const response = await fetch(`/api/users/email/${email}`)
-    // const response = await fetch(`/api/users/${email}`)
+    // const response = await fetch(`/api/users/email/${email}`)
+    const response = await fetch(`/api/users/${email}`)
     if (!response.ok) return undefined
     const user = await response.json()
     return user
@@ -66,13 +67,18 @@ export async function deleteMeal(mealId: string): Promise<boolean> {
 }
 
 // Fonctions d'API pour les repas hebdomadaires
-export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
-  const response = await fetch(`/api/weekly-meals?weekOffset=${weekOffset}`)
+// export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
+//   const response = await fetch(`/api/weekly-meals?weekOffset=${weekOffset}`)
 
-  if (!response.ok) {
-    throw new Error("Erreur lors de la récupération des repas de la semaine")
-  }
+//   if (!response.ok) {
+//     throw new Error("Erreur lors de la récupération des repas de la semaine")
+//   }
 
+//   return await response.json()
+// }
+export async function getWeeklyMealsForWeek(weekNumber: number): Promise<DayMeals[]> {
+  const response = await fetch(`/api/weekly-meals?weekNumber=${weekNumber}`)
+  if (!response.ok) throw new Error("Erreur lors de la récupération des repas")
   return await response.json()
 }
 
@@ -440,8 +446,30 @@ export function getDayAvailabilityMessageForUser(dateStr: string): string {
 }
 
 // Mettre à jour la fonction de compatibilité pour inclure le weekOffset
-export function isDayEditable(dateStr: string, isAdmin = false, weekOffset = 0): boolean {
-  return isAdmin ? isDayEditableForAdmin(dateStr, weekOffset) : isDayEditableForUser(dateStr)
+// export function isDayEditable(dateStr: string, isAdmin = false, weekOffset = 0): boolean {
+//   return isAdmin ? isDayEditableForAdmin(dateStr, weekOffset) : isDayEditableForUser(dateStr)
+// }
+export function isDayEditable(dateStr: string): boolean {
+  const today = new Date()
+  const [day, month] = dateStr.split(" ")
+  const monthMap: Record<string, number> = {
+    janvier: 0,
+    février: 1,
+    mars: 2,
+    avril: 3,
+    mai: 4,
+    juin: 5,
+    juillet: 6,
+    août: 7,
+    septembre: 8,
+    octobre: 9,
+    novembre: 10,
+    décembre: 11,
+  }
+
+  const date = new Date(today.getFullYear(), monthMap[month.toLowerCase()], parseInt(day))
+  if (date < new Date()) return false
+  return true
 }
 
 export function getDayAvailabilityMessage(dateStr: string, isAdmin = false, weekOffset = 0): string {
