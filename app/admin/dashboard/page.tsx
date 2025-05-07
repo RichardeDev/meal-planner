@@ -329,14 +329,14 @@ export default function AdminDashboard() {
 
     monday.setDate(diff + weekOffset * 7)
 
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
+    const friday = new Date(monday)
+    friday.setDate(monday.getDate() + 4) // Vendredi = Lundi + 4 jours
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
     }
 
-    return `${formatDate(monday)} - ${formatDate(sunday)}`
+    return `${formatDate(monday)} - ${formatDate(friday)}`
   }
 
   // Fonction pour exporter les sélections d'un jour en PDF

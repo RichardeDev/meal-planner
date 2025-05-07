@@ -121,14 +121,14 @@ export default function UserDashboard() {
 
     monday.setDate(diff + weekOffset * 7)
 
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
+    const friday = new Date(monday)
+    friday.setDate(monday.getDate() + 4) // Vendredi = Lundi + 4 jours
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
     }
 
-    return `${formatDate(monday)} - ${formatDate(sunday)}`
+    return `${formatDate(monday)} - ${formatDate(friday)}`
   }
 
   // Afficher un état de chargement pendant que les données sont récupérées

@@ -3,8 +3,8 @@ import type { User, Meal, DayMeals, UserSelection } from "@/lib/json-utils"
 // Fonctions d'API pour les utilisateurs
 export async function getUserByEmail(email: string): Promise<User | undefined> {
   try {
-    const response = await fetch(`/api/users/email/${email}`)
-    // const response = await fetch(`/api/users/${email}`)
+    const encodedEmail = encodeURIComponent(email)
+    const response = await fetch(`/api/users/${encodedEmail}`)
     if (!response.ok) return undefined
     const user = await response.json()
     return user

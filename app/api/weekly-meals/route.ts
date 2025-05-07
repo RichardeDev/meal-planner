@@ -77,23 +77,63 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-// Generate dates for a specific week
+// Fonction pour obtenir le numéro de semaine ISO d'une date
+function getISOWeekNumber(date: Date): number {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  // Jeudi de la semaine en cours
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
+  // Premier janvier de l'année
+  const firstWeek = new Date(d.getFullYear(), 0, 4)
+  // Ajuster au jeudi de la première semaine
+  firstWeek.setDate(firstWeek.getDate() + 3 - ((firstWeek.getDay() + 6) % 7))
+  // Calculer la différence en semaines
+  const weekNumber =
+    1 + Math.round(((d.getTime() - firstWeek.getTime()) / 86400000 - 3 + ((firstWeek.getDay() + 6) % 7)) / 7)
+  return weekNumber
+}
+
+// Fonction pour obtenir l'année de la semaine ISO
+function getISOWeekYear(date: Date): number {
+  const d = new Date(date)
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
+  return d.getFullYear()
+}
+
+// Fonction pour obtenir l'identifiant unique de la semaine (année-semaine)
+function getWeekId(weekOffset = 0): string {
+  const today = new Date()
+  today.setDate(today.getDate() + weekOffset * 7)
+  const weekNumber = getISOWeekNumber(today)
+  const weekYear = getISOWeekYear(today)
+  return `${weekYear}-${weekNumber}`
+}
+
+// Remplacer la fonction getWeekDates par cette version corrigée
 const getWeekDates = (weekOffset = 0) => {
   const today = new Date()
-  const day = today.getDay() // 0 is Sunday, 1 is Monday, etc.
-  const diff = today.getDate() - day + (day === 0 ? -6 : 1) // Adjust when day is Sunday
 
+  // Trouver le lundi de la semaine actuelle
+  const currentDay = today.getDay() // 0 = dimanche, 1 = lundi, etc.
+  const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1) // Ajuster quand le jour est dimanche
+
+  // Créer une nouvelle date pour le lundi de la semaine demandée
   const monday = new Date(today)
   monday.setDate(diff + weekOffset * 7)
 
+  // Réinitialiser les heures pour éviter les problèmes de fuseau horaire
+  monday.setHours(0, 0, 0, 0)
+
+  // Générer les dates pour chaque jour de la semaine (lundi à vendredi)
   const weekDays = [
     { name: "Lundi", date: new Date(monday) },
-    { name: "Mardi", date: new Date(new Date(monday).setDate(monday.getDate() + 1)) },
-    { name: "Mercredi", date: new Date(new Date(monday).setDate(monday.getDate() + 2)) },
-    { name: "Jeudi", date: new Date(new Date(monday).setDate(monday.getDate() + 3)) },
-    { name: "Vendredi", date: new Date(new Date(monday).setDate(monday.getDate() + 4)) },
+    { name: "Mardi", date: new Date(monday.getTime() + 86400000) }, // +1 jour en millisecondes
+    { name: "Mercredi", date: new Date(monday.getTime() + 86400000 * 2) }, // +2 jours
+    { name: "Jeudi", date: new Date(monday.getTime() + 86400000 * 3) }, // +3 jours
+    { name: "Vendredi", date: new Date(monday.getTime() + 86400000 * 4) }, // +4 jours
   ]
 
+  // Formater les dates pour l'affichage
   return weekDays.map((day) => ({
     day: day.name,
     date: day.date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" }),
@@ -127,11 +167,12 @@ export async function generateWeeklyMeals(weekOffset = 0): Promise<DayMeals[]> {
 // Get weekly meals for a specific week
 export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
   const data = await readData()
-  const weekOffsetStr = weekOffset.toString()
+  // Utiliser l'identifiant unique de la semaine au lieu de weekOffset
+  const weekId = getWeekId(weekOffset)
 
   // If we already have data for this week, return it
-  if (data.weeklyMealsStorage[weekOffsetStr]) {
-    return data.weeklyMealsStorage[weekOffsetStr]
+  if (data.weeklyMealsStorage[weekId]) {
+    return data.weeklyMealsStorage[weekId]
   }
 
   // Otherwise, generate new data
@@ -141,7 +182,7 @@ export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]>
   await updateData("weeklyMealsStorage", (storage) => {
     return {
       ...storage,
-      [weekOffsetStr]: newWeeklyMeals,
+      [weekId]: newWeeklyMeals,
     }
   })
 
@@ -156,10 +197,11 @@ export async function updateMeal(
   weekOffset = 0,
 ): Promise<boolean> {
   const data = await readData()
-  const weekOffsetStr = weekOffset.toString()
+  // Utiliser l'identifiant unique de la semaine
+  const weekId = getWeekId(weekOffset)
 
   // Get the meals for the specified week
-  let weekMeals = data.weeklyMealsStorage[weekOffsetStr]
+  let weekMeals = data.weeklyMealsStorage[weekId]
   if (!weekMeals) {
     weekMeals = await getWeeklyMealsForWeek(weekOffset)
   }
@@ -183,7 +225,7 @@ export async function updateMeal(
   await updateData("weeklyMealsStorage", (storage) => {
     return {
       ...storage,
-      [weekOffsetStr]: weekMeals,
+      [weekId]: weekMeals,
     }
   })
 
@@ -203,10 +245,11 @@ export async function updateMeal(
 // Add a meal to a day in a specific week
 export async function addMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
   const data = await readData()
-  const weekOffsetStr = weekOffset.toString()
+  // Utiliser l'identifiant unique de la semaine
+  const weekId = getWeekId(weekOffset)
 
   // Get the meals for the specified week
-  let weekMeals = data.weeklyMealsStorage[weekOffsetStr]
+  let weekMeals = data.weeklyMealsStorage[weekId]
   if (!weekMeals) {
     weekMeals = await getWeeklyMealsForWeek(weekOffset)
   }
@@ -226,7 +269,7 @@ export async function addMeal(dayId: string, mealId: string, weekOffset = 0): Pr
   await updateData("weeklyMealsStorage", (storage) => {
     return {
       ...storage,
-      [weekOffsetStr]: weekMeals,
+      [weekId]: weekMeals,
     }
   })
 
@@ -236,10 +279,11 @@ export async function addMeal(dayId: string, mealId: string, weekOffset = 0): Pr
 // Remove a meal from a day in a specific week
 export async function removeMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
   const data = await readData()
-  const weekOffsetStr = weekOffset.toString()
+  // Utiliser l'identifiant unique de la semaine
+  const weekId = getWeekId(weekOffset)
 
   // Get the meals for the specified week
-  let weekMeals = data.weeklyMealsStorage[weekOffsetStr]
+  let weekMeals = data.weeklyMealsStorage[weekId]
   if (!weekMeals) {
     weekMeals = await getWeeklyMealsForWeek(weekOffset)
   }
@@ -255,7 +299,7 @@ export async function removeMeal(dayId: string, mealId: string, weekOffset = 0):
   await updateData("weeklyMealsStorage", (storage) => {
     return {
       ...storage,
-      [weekOffsetStr]: weekMeals,
+      [weekId]: weekMeals,
     }
   })
 

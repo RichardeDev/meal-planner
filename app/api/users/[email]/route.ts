@@ -5,8 +5,9 @@ import { readData } from "@/lib/json-utils"
 export async function GET(request: NextRequest, { params }: { params: { email: string } }) {
   try {
     const { email } = params
+    const decodedEmail = decodeURIComponent(email)
     const data = await readData()
-    const user = data.users.find((user) => user.email === email)
+    const user = data.users.find((user) => user.email === decodedEmail)
     
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
