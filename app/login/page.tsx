@@ -5,12 +5,13 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import { getUserByEmail } from "@/lib/data"
+import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -23,13 +24,13 @@ export default function LoginPage() {
     
     const user = await getUserByEmail(email);
 
-    if (user && user.role === "admin") {
+    if (user && user.role === "admin" && user.password === password) {
       localStorage.setItem("user", JSON.stringify(user));
       toast.success("Connexion réussie", {
         description: `Bienvenue, ${user.name}!`,
       });
       router.push("/admin/dashboard");
-    } else if (user && user.role === "user") {
+    } else if (user && user.role === "user" && user.password === password) {
       localStorage.setItem("user", JSON.stringify(user));
       toast.success("Connexion réussie", {
         description: `Bienvenue, ${user.name}!`,
@@ -106,6 +107,14 @@ export default function LoginPage() {
             </TabsContent>
           </Tabs>
         </CardContent>
+        <CardFooter className="flex justify-center">
+          <p className="text-sm text-muted-foreground">
+            Pas encore inscrit ?{" "}
+            <Link href="/signup" className="text-primary hover:underline">
+              Créer un compte
+            </Link>
+          </p>
+        </CardFooter>
       </Card>
     </div>
   )

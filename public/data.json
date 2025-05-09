@@ -4,12 +4,14 @@
       "id": "1",
       "name": "Admin User",
       "email": "admin@example.com",
+      "password": "admin123",
       "role": "admin"
     },
     {
       "id": "2",
       "name": "Regular User",
       "email": "user@example.com",
+      "password": "user123",
       "role": "user"
     },
     {
@@ -22,12 +24,21 @@
       "id": "4",
       "name": "Marie Martin",
       "email": "marie@example.com",
+      "password": "user123",
       "role": "user"
     },
     {
       "id": "5",
       "name": "Pierre Durand",
       "email": "pierre@example.com",
+      "password": "user123",
+      "role": "user"
+    },
+    {
+      "id": "6",
+      "name": "richardet william",
+      "email": "richardetwilliam@gmail.com",
+      "password": "user123",
       "role": "user"
     }
   ],
@@ -167,7 +178,9 @@
             "name": "Pizza Margherita",
             "description": "Pizza avec tomate et mozzarella"
           }
-        ]
+        ],
+        "isHoliday": true,
+        "holidayName": "Victoire 1945"
       },
       {
         "day": "Vendredi",
@@ -188,7 +201,9 @@
             "name": "Poulet rôti",
             "description": "Poulet rôti avec pommes de terre"
           }
-        ]
+        ],
+        "isHoliday": true,
+        "holidayName": "Ascension"
       }
     ],
     "2025-20": [
@@ -339,7 +354,9 @@
             "name": "Poisson pané",
             "description": "Poisson pané avec riz et légumes"
           }
-        ]
+        ],
+        "isHoliday": true,
+        "holidayName": "Lundi de Pentecôte"
       },
       {
         "day": "Mercredi",
@@ -488,7 +505,9 @@
             "name": "Pizza Margherita",
             "description": "Pizza avec tomate et mozzarella"
           }
-        ]
+        ],
+        "isHoliday": true,
+        "holidayName": "Fête du Travail"
       },
       {
         "day": "Vendredi",
@@ -531,6 +550,75 @@
       "userName": "Pierre Durand",
       "dayId": "Mardi",
       "mealId": "4"
+    }
+  ],
+  "pendingUsers": [],
+  "holidays": [
+    {
+      "id": "holiday_1746629552212",
+      "name": "Jour de l'An",
+      "date": "2024-01-01",
+      "recurring": true
+    },
+    {
+      "id": "holiday_1746629555809",
+      "name": "Lundi de Pâques",
+      "date": "2024-04-01",
+      "recurring": false
+    },
+    {
+      "id": "holiday_1746629557963",
+      "name": "Fête du Travail",
+      "date": "2024-05-01",
+      "recurring": true
+    },
+    {
+      "id": "holiday_1746629561680",
+      "name": "Victoire 1945",
+      "date": "2024-05-08",
+      "recurring": true
+    },
+    {
+      "id": "holiday_1746629563975",
+      "name": "Ascension",
+      "date": "2024-05-09",
+      "recurring": false
+    },
+    {
+      "id": "holiday_1746629565076",
+      "name": "Lundi de Pentecôte",
+      "date": "2024-05-20",
+      "recurring": false
+    },
+    {
+      "id": "holiday_1746629566339",
+      "name": "Fête Nationale",
+      "date": "2024-07-14",
+      "recurring": true
+    },
+    {
+      "id": "holiday_1746629569830",
+      "name": "Assomption",
+      "date": "2024-08-15",
+      "recurring": true
+    },
+    {
+      "id": "holiday_1746629573947",
+      "name": "Toussaint",
+      "date": "2024-11-01",
+      "recurring": true
+    },
+    {
+      "id": "holiday_1746629577481",
+      "name": "Armistice 1918",
+      "date": "2024-11-11",
+      "recurring": true
+    },
+    {
+      "id": "holiday_1746629579846",
+      "name": "Noël",
+      "date": "2024-12-25",
+      "recurring": true
     }
   ]
 }

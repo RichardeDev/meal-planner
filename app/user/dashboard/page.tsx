@@ -52,7 +52,7 @@ export default function UserDashboard() {
         const weeklyMeals = await getWeeklyMealsForWeek(currentWeek)
         setMeals(weeklyMeals)
 
-        const selections = await getUserSelections(userId)
+        const selections = await getUserSelections(userId, currentWeek)
         setUserSelections(selections)
       } catch (error) {
         console.error("Error loading data:", error)
@@ -67,7 +67,7 @@ export default function UserDashboard() {
     loadData()
   }, [userId, currentWeek])
 
-  // Modifier la fonction handleSelectMeal pour utiliser la date au lieu du jour
+  // Mettre à jour la fonction handleSelectMeal pour inclure le weekOffset
   const handleSelectMeal = async (dayId: string, mealId: string) => {
     // Trouver la date correspondant au jour
     const dayData = meals.find((d) => d.day === dayId)
@@ -82,10 +82,18 @@ export default function UserDashboard() {
       return
     }
 
-    await selectMeal(userId, userName, dayId, mealId)
+    // Vérifier si c'est un jour férié
+    if (dayData.isHoliday) {
+      toast.error("Sélection impossible", {
+        description: `Ce jour est férié (${dayData.holidayName})`,
+      })
+      return
+    }
+
+    await selectMeal(userId, userName, dayId, mealId, currentWeek)
 
     // Refresh selections
-    const selections = await getUserSelections(userId)
+    const selections = await getUserSelections(userId, currentWeek)
     setUserSelections(selections)
 
     toast.success("Repas sélectionné", {
@@ -121,14 +129,14 @@ export default function UserDashboard() {
 
     monday.setDate(diff + weekOffset * 7)
 
-    const friday = new Date(monday)
-    friday.setDate(monday.getDate() + 4) // Vendredi = Lundi + 4 jours
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
 
     const formatDate = (date: Date) => {
       return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
     }
 
-    return `${formatDate(monday)} - ${formatDate(friday)}`
+    return `${formatDate(monday)} - ${formatDate(sunday)}`
   }
 
   // Afficher un état de chargement pendant que les données sont récupérées
@@ -136,8 +144,8 @@ export default function UserDashboard() {
     return (
       <div className="flex min-h-screen flex-col">
         <UserHeader />
-        <main className="flex-1 container py-6">
-          <div className="mb-6">
+        <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-6">
             <h1 className="text-3xl font-bold mb-2">Menu de la Semaine</h1>
             <p className="text-muted-foreground">Chargement des données...</p>
           </div>

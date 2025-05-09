@@ -10,6 +10,8 @@ export type AppData = {
   meals: Meal[]
   weeklyMealsStorage: Record<string, DayMeals[]>
   userSelections: UserSelection[]
+  pendingUsers?: PendingUser[]
+  holidays?: Holiday[]
 }
 
 export type User = {
@@ -17,6 +19,16 @@ export type User = {
   name: string
   email: string
   role: "admin" | "user"
+  password?: string
+}
+
+export type PendingUser = {
+  id: string
+  name: string
+  email: string
+  password: string
+  role: "user"
+  createdAt: string
 }
 
 export type Meal = {
@@ -29,6 +41,8 @@ export type DayMeals = {
   day: string
   date: string
   meals: Meal[]
+  isHoliday?: boolean
+  holidayName?: string
 }
 
 export type UserSelection = {
@@ -36,6 +50,14 @@ export type UserSelection = {
   userName: string
   dayId: string
   mealId: string
+  weekOffset?: number
+}
+
+export type Holiday = {
+  id: string
+  name: string
+  date: string
+  recurring?: boolean
 }
 
 // Fonction pour lire les données du fichier JSON
@@ -49,6 +71,8 @@ export async function readData(): Promise<AppData> {
         meals: [],
         weeklyMealsStorage: {},
         userSelections: [],
+        pendingUsers: [],
+        holidays: [],
       }
       await writeData(defaultData)
       return defaultData
