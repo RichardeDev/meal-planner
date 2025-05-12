@@ -9,8 +9,6 @@ import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import UserHeader from "@/components/user-header"
 import {
-  type DayMeals,
-  type UserSelection,
   getWeeklyMealsForWeek,
   selectMeal,
   getUserSelections,
@@ -19,12 +17,31 @@ import {
   isThursdayOrLater,
 } from "@/lib/data"
 import { toast } from "sonner"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 
+// Composant de chargement pour améliorer l'UX pendant le chargement
+function LoadingState() {
+  return (
+    <div className="flex min-h-screen flex-col">
+      <UserHeader />
+      <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold mb-2">Menu de la Semaine</h1>
+          <p className="text-muted-foreground">Chargement des données...</p>
+        </div>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// Composant principal du dashboard utilisateur
 export default function UserDashboard() {
-  const [meals, setMeals] = useState<DayMeals[]>([])
-  const [userSelections, setUserSelections] = useState<UserSelection[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [currentWeek, setCurrentWeek] = useState<number>(0) // 0 = semaine actuelle
+  // Utiliser React Query pour la gestion de l'état et la mise en cache
+  const queryClient = useQueryClient()
+  const [currentWeek, setCurrentWeek] = useState<number>(0)
 
   // Récupérer l'utilisateur depuis localStorage (côté client uniquement)
   const [user, setUser] = useState<{ id: string; name: string } | null>(null)
@@ -44,37 +61,55 @@ export default function UserDashboard() {
   const userId = user?.id || "2"
   const userName = user?.name || "Regular User"
 
-  useEffect(() => {
-    // Load meals and user selections
-    const loadData = async () => {
-      setIsLoading(true)
-      try {
-        const weeklyMeals = await getWeeklyMealsForWeek(currentWeek)
-        setMeals(weeklyMeals)
+  // Requête pour récupérer les repas de la semaine
+  const {
+    data: meals = [],
+    isLoading: isMealsLoading,
+    error: mealsError,
+  } = useQuery({
+    queryKey: ["weeklyMeals", currentWeek],
+    queryFn: () => getWeeklyMealsForWeek(currentWeek),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: false,
+  })
 
-        const selections = await getUserSelections(userId, currentWeek)
-        setUserSelections(selections)
-      } catch (error) {
-        console.error("Error loading data:", error)
-        toast.error("Erreur", {
-          description: "Impossible de charger les données",
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  // Requête pour récupérer les sélections de l'utilisateur
+  const {
+    data: userSelections = [],
+    isLoading: isSelectionsLoading,
+    error: selectionsError,
+  } = useQuery({
+    queryKey: ["userSelections", userId, currentWeek],
+    queryFn: () => getUserSelections(userId, currentWeek),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchOnWindowFocus: false,
+  })
 
-    loadData()
-  }, [userId, currentWeek])
+  // Mutation pour sélectionner un repas
+  const selectMealMutation = useMutation({
+    mutationFn: ({ dayId, mealId }: { dayId: string; mealId: string }) =>
+      selectMeal(userId, userName, dayId, mealId, currentWeek),
+    onSuccess: () => {
+      // Invalider la requête des sélections pour forcer un rafraîchissement
+      queryClient.invalidateQueries({ queryKey: ["userSelections", userId, currentWeek] })
+      toast.success("Repas sélectionné", {
+        description: "Votre choix a été enregistré",
+      })
+    },
+    onError: () => {
+      toast.error("Erreur", {
+        description: "Impossible de sélectionner ce repas",
+      })
+    },
+  })
 
-  // Mettre à jour la fonction handleSelectMeal pour inclure le weekOffset
+  // Gérer la sélection d'un repas
   const handleSelectMeal = async (dayId: string, mealId: string) => {
     // Trouver la date correspondant au jour
     const dayData = meals.find((d) => d.day === dayId)
     if (!dayData) return
 
     // Vérifier si le jour est modifiable (dans le futur)
-    // Pour les utilisateurs simples, utiliser isAdmin=false (par défaut)
     if (!isDayEditable(dayData.date)) {
       toast.error("Sélection impossible", {
         description: getDayAvailabilityMessage(dayData.date),
@@ -90,15 +125,8 @@ export default function UserDashboard() {
       return
     }
 
-    await selectMeal(userId, userName, dayId, mealId, currentWeek)
-
-    // Refresh selections
-    const selections = await getUserSelections(userId, currentWeek)
-    setUserSelections(selections)
-
-    toast.success("Repas sélectionné", {
-      description: "Votre choix a été enregistré",
-    })
+    // Exécuter la mutation
+    selectMealMutation.mutate({ dayId, mealId })
   }
 
   const getUserSelectionForDay = (dayId: string) => {
@@ -140,18 +168,23 @@ export default function UserDashboard() {
   }
 
   // Afficher un état de chargement pendant que les données sont récupérées
-  if (isLoading) {
+  if (isMealsLoading || isSelectionsLoading) {
+    return <LoadingState />
+  }
+
+  // Gérer les erreurs
+  if (mealsError || selectionsError) {
     return (
       <div className="flex min-h-screen flex-col">
         <UserHeader />
-        <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold mb-2">Menu de la Semaine</h1>
-            <p className="text-muted-foreground">Chargement des données...</p>
-          </div>
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
+        <main className="flex-1 container py-6">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erreur</AlertTitle>
+            <AlertDescription>
+              Une erreur est survenue lors du chargement des données. Veuillez réessayer plus tard.
+            </AlertDescription>
+          </Alert>
         </main>
       </div>
     )
@@ -231,9 +264,13 @@ export default function UserDashboard() {
                               onClick={() => handleSelectMeal(day.day, meal.id)}
                               variant={isSelected ? "secondary" : "default"}
                               className="w-full"
-                              disabled={!isEditable}
+                              disabled={!isEditable || selectMealMutation.isPending}
                             >
-                              {isSelected ? "Sélectionné" : "Sélectionner"}
+                              {selectMealMutation.isPending
+                                ? "Chargement..."
+                                : isSelected
+                                  ? "Sélectionné"
+                                  : "Sélectionner"}
                             </Button>
                           </CardFooter>
                         </Card>

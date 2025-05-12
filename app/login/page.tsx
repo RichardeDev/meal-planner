@@ -26,12 +26,16 @@ export default function LoginPage() {
 
     if (user && user.role === "admin" && user.password === password) {
       localStorage.setItem("user", JSON.stringify(user));
+      document.cookie = `authToken=${btoa(user.email + ":" + user.password)};path=/;max-age=86400`
+      document.cookie = `userRole=admin;path=/;max-age=86400`
       toast.success("Connexion réussie", {
         description: `Bienvenue, ${user.name}!`,
       });
       router.push("/admin/dashboard");
     } else if (user && user.role === "user" && user.password === password) {
       localStorage.setItem("user", JSON.stringify(user));
+      document.cookie = `authToken=${btoa(user.email + ":" + user.password)};path=/;max-age=86400`
+      document.cookie = `userRole=user;path=/;max-age=86400`
       toast.success("Connexion réussie", {
         description: `Bienvenue, ${user.name}!`,
       });

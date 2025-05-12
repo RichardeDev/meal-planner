@@ -23,21 +23,12 @@ import { format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import type { Holiday } from "@/lib/json-utils"
-
-// Jours fériés français par défaut
-const defaultFrenchHolidays = [
-  { name: "Jour de l'An", date: "2024-01-01", recurring: true },
-  { name: "Lundi de Pâques", date: "2024-04-01", recurring: false },
-  { name: "Fête du Travail", date: "2024-05-01", recurring: true },
-  { name: "Victoire 1945", date: "2024-05-08", recurring: true },
-  { name: "Ascension", date: "2024-05-09", recurring: false },
-  { name: "Lundi de Pentecôte", date: "2024-05-20", recurring: false },
-  { name: "Fête Nationale", date: "2024-07-14", recurring: true },
-  { name: "Assomption", date: "2024-08-15", recurring: true },
-  { name: "Toussaint", date: "2024-11-01", recurring: true },
-  { name: "Armistice 1918", date: "2024-11-11", recurring: true },
-  { name: "Noël", date: "2024-12-25", recurring: true },
-]
+import {
+  getFrenchHolidays,
+  convertHolidaysToApiFormat,
+  isHoliday as checkIsHoliday,
+  getHolidayName as getHolidayNameUtil,
+} from "@/lib/holiday-utils"
 
 export default function HolidaysPage() {
   const [holidays, setHolidays] = useState<Holiday[]>([])
@@ -57,6 +48,14 @@ export default function HolidaysPage() {
   const [view, setView] = useState<"list" | "calendar">("list")
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [holidayDates, setHolidayDates] = useState<Date[]>([])
+  const [currentYear, setCurrentYear] = useState<number>(new Date().getFullYear())
+  const [calculatedHolidays, setCalculatedHolidays] = useState<{ name: string; date: Date; recurring: boolean }[]>([])
+
+  useEffect(() => {
+    // Calculer les jours fériés français pour l'année en cours
+    const frenchHolidays = getFrenchHolidays(currentYear)
+    setCalculatedHolidays(frenchHolidays)
+  }, [currentYear])
 
   useEffect(() => {
     const fetchHolidays = async () => {
@@ -68,8 +67,11 @@ export default function HolidaysPage() {
 
         // Si aucun jour férié n'est configuré, ajouter les jours fériés français par défaut
         if (data.length === 0) {
+          // Convertir les jours fériés calculés au format API
+          const defaultHolidays = convertHolidaysToApiFormat(calculatedHolidays)
+
           // Ajouter les jours fériés français par défaut
-          for (const holiday of defaultFrenchHolidays) {
+          for (const holiday of defaultHolidays) {
             await fetch("/api/holidays", {
               method: "POST",
               headers: {
@@ -102,7 +104,7 @@ export default function HolidaysPage() {
     }
 
     fetchHolidays()
-  }, [])
+  }, [calculatedHolidays])
 
   const handleAddHoliday = async () => {
     if (!newHoliday.name || !newHoliday.date) {
@@ -152,7 +154,7 @@ export default function HolidaysPage() {
     }
   }
 
-  const handleDeleteHoliday = async () => {
+  const handleDeleteHoliday = async (): Promise<void> => {
     if (!holidayToDelete) return
 
     try {
@@ -184,18 +186,38 @@ export default function HolidaysPage() {
 
   // Fonction pour vérifier si une date est un jour férié
   const isHoliday = (date: Date) => {
-    return holidayDates.some(
+    // Vérifier d'abord dans les jours fériés enregistrés
+    const isRegisteredHoliday = holidayDates.some(
       (holidayDate) => holidayDate.getDate() === date.getDate() && holidayDate.getMonth() === date.getMonth(),
     )
+
+    // Si ce n'est pas un jour férié enregistré, vérifier dans les jours fériés calculés
+    if (!isRegisteredHoliday) {
+      return checkIsHoliday(date, calculatedHolidays)
+    }
+
+    return isRegisteredHoliday
   }
 
   // Fonction pour obtenir le nom du jour férié
   const getHolidayName = (date: Date) => {
+    // Chercher d'abord dans les jours fériés enregistrés
     const holiday = holidays.find((h) => {
       const holidayDate = new Date(h.date)
       return holidayDate.getDate() === date.getDate() && holidayDate.getMonth() === date.getMonth()
     })
-    return holiday ? holiday.name : ""
+
+    if (holiday) {
+      return holiday.name
+    }
+
+    // Si non trouvé, chercher dans les jours fériés calculés
+    return getHolidayNameUtil(date, calculatedHolidays)
+  }
+
+  // Fonction pour changer l'année
+  const changeYear = (increment: number) => {
+    setCurrentYear((prev) => prev + increment)
   }
 
   if (isLoading) {
@@ -229,6 +251,15 @@ export default function HolidaysPage() {
             <CardDescription>Gérez les jours fériés pour lesquels aucun repas ne sera proposé</CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="flex justify-between items-center mb-4">
+              <Button variant="outline" onClick={() => changeYear(-1)}>
+                Année précédente
+              </Button>
+              <h2 className="text-xl font-semibold">{currentYear}</h2>
+              <Button variant="outline" onClick={() => changeYear(1)}>
+                Année suivante
+              </Button>
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -293,6 +324,15 @@ export default function HolidaysPage() {
             <CardDescription>Visualisez tous les jours fériés de l'année</CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="flex justify-between items-center mb-4">
+              <Button variant="outline" onClick={() => changeYear(-1)}>
+                Année précédente
+              </Button>
+              <h2 className="text-xl font-semibold">{currentYear}</h2>
+              <Button variant="outline" onClick={() => changeYear(1)}>
+                Année suivante
+              </Button>
+            </div>
             <div className="flex justify-center">
               <CalendarComponent
                 mode="single"
