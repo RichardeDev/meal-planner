@@ -228,13 +228,14 @@ export default function UserDashboardClientPage() {
                 <TabsTrigger key={day.day} value={day.day}>
                   {day.day}
                   <span className="ml-2 text-xs text-muted-foreground hidden sm:inline">{day.date}</span>
+                  {day.isHoliday && <span className="ml-1 text-red-500">*</span>}
                 </TabsTrigger>
               ))}
             </TabsList>
 
             {meals.map((day) => {
               // Pour les utilisateurs simples, utiliser isAdmin=false (par défaut)
-              const isEditable = isDayEditable(day.date)
+              const isEditable = isDayEditable(day.date) 
 
               return (
                 <TabsContent key={day.day} value={day.day} className="space-y-4">
@@ -245,38 +246,51 @@ export default function UserDashboardClientPage() {
                       <AlertDescription>{getDayAvailabilityMessage(day.date)}</AlertDescription>
                     </Alert>
                   )}
+                  {day.isHoliday && (
+                    <Alert variant={day.isHoliday ? "default" : "destructive"} className="mb-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>{day.isHoliday ? "Jour férié" : "Modification fermée"}</AlertTitle>
+                      <AlertDescription>
+                        {day.isHoliday
+                          ? `Ce jour est férié (${day.holidayName})`
+                          : getDayAvailabilityMessage(day.date, true, currentWeek)}
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
-                  <div className="grid gap-4 md:grid-cols-3">
-                    {day.meals.map((meal) => {
-                      const isSelected = userSelections.some((s) => s.dayId === day.day && s.mealId === meal.id)
+                  {!day.isHoliday && (
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {day.meals.map((meal) => {
+                        const isSelected = userSelections.some((s) => s.dayId === day.day && s.mealId === meal.id)
 
-                      return (
-                        <Card key={meal.id} className={isSelected ? "border-primary" : ""}>
-                          <CardHeader>
-                            <CardTitle className="flex justify-between items-start">
-                              {meal.name}
-                              {isSelected && <Badge className="ml-2">Sélectionné</Badge>}
-                            </CardTitle>
-                            <CardDescription>{meal.description}</CardDescription>
-                          </CardHeader>
-                          <CardFooter>
-                            <Button
-                              onClick={() => handleSelectMeal(day.day, meal.id)}
-                              variant={isSelected ? "secondary" : "default"}
-                              className="w-full"
-                              disabled={!isEditable || selectMealMutation.isPending}
-                            >
-                              {selectMealMutation.isPending
-                                ? "Chargement..."
-                                : isSelected
-                                  ? "Sélectionné"
-                                  : "Sélectionner"}
-                            </Button>
-                          </CardFooter>
-                        </Card>
-                      )
-                    })}
-                  </div>
+                        return (
+                          <Card key={meal.id} className={isSelected ? "border-primary" : ""}>
+                            <CardHeader>
+                              <CardTitle className="flex justify-between items-start">
+                                {meal.name}
+                                {isSelected && <Badge className="ml-2">Sélectionné</Badge>}
+                              </CardTitle>
+                              <CardDescription>{meal.description}</CardDescription>
+                            </CardHeader>
+                            <CardFooter>
+                              <Button
+                                onClick={() => handleSelectMeal(day.day, meal.id)}
+                                variant={isSelected ? "secondary" : "default"}
+                                className="w-full"
+                                disabled={!isEditable || selectMealMutation.isPending}
+                              >
+                                {selectMealMutation.isPending
+                                  ? "Chargement..."
+                                  : isSelected
+                                    ? "Sélectionné"
+                                    : "Sélectionner"}
+                              </Button>
+                            </CardFooter>
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  )}
                 </TabsContent>
               )
             })}
@@ -285,44 +299,44 @@ export default function UserDashboardClientPage() {
           <div className="text-center py-8 text-muted-foreground">Aucun repas n'a été configuré pour cette semaine</div>
         )}
 
-        <div className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Vos sélections</CardTitle>
-              <CardDescription>Récapitulatif de vos choix pour la semaine</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {userSelections.length > 0 ? (
-                <div className="space-y-2">
-                  {meals.map((day) => {
-                    const selection = getUserSelectionForDay(day.day)
-                    if (!selection) return null
+          <div className="mt-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Vos sélections</CardTitle>
+                <CardDescription>Récapitulatif de vos choix pour la semaine</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {userSelections.length > 0 ? (
+                  <div className="space-y-2">
+                    {meals.map((day) => {
+                      const selection = getUserSelectionForDay(day.day)
+                      if (!selection) return null
 
-                    const meal = getMealById(selection.mealId)
-                    if (!meal) return null
+                      const meal = getMealById(selection.mealId)
+                      if (!meal) return null
 
-                    const isEditable = isDayEditable(day.date)
+                      const isEditable = isDayEditable(day.date)
 
-                    return (
-                      <div key={day.day} className="flex justify-between items-center p-3 border rounded-md">
-                        <div>
-                          <span className="font-medium">{day.day}</span>
-                          <span className="text-sm text-muted-foreground ml-2">{day.date}</span>
-                          {!isEditable && <span className="ml-2 text-xs text-destructive">(Verrouillé)</span>}
+                      return (
+                        <div key={day.day} className="flex justify-between items-center p-3 border rounded-md">
+                          <div>
+                            <span className="font-medium">{day.day}</span>
+                            <span className="text-sm text-muted-foreground ml-2">{day.date}</span>
+                            {!isEditable && <span className="ml-2 text-xs text-destructive">(Verrouillé)</span>}
+                          </div>
+                          <div className="font-medium">{meal.name}</div>
                         </div>
-                        <div className="font-medium">{meal.name}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-4 text-muted-foreground">
-                  Vous n&apos;avez pas encore fait de sélection
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    Vous n&apos;avez pas encore fait de sélection
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
       </main>
     </div>
   )
