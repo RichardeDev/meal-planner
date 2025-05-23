@@ -109,7 +109,6 @@ function getWeekId(weekOffset = 0): string {
   return `${weekYear}-${weekNumber}`
 }
 
-// Remplacer la fonction getWeekDates par cette version corrigée
 const getWeekDates = (weekOffset = 0) => {
   const today = new Date()
 

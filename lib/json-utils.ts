@@ -18,7 +18,8 @@ export type User = {
   id: string
   name: string
   email: string
-  role: "admin" | "user"
+  role: string
+  // role: "admin" | "user"
   password?: string
 }
 

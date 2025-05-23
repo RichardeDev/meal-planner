@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Supprimer l'utilisateur de la liste des utilisateurs en attente
-    await updateData("pendingUsers", (pendingUsers) => pendingUsers.filter((user) => user.id !== pendingUserId))
+    await updateData("pendingUsers", (pendingUsers) => pendingUsers?.filter((user) => user.id !== pendingUserId))
 
     return NextResponse.json({
       message: action === "approve" ? "Utilisateur validé avec succès" : "Utilisateur rejeté avec succès",

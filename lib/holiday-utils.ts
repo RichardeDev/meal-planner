@@ -76,7 +76,15 @@ export function convertHolidaysToApiFormat(
 ): { name: string; date: string; recurring: boolean }[] {
   return holidays.map((holiday) => ({
     name: holiday.name,
-    date: holiday.date.toISOString().split("T")[0], // Format YYYY-MM-DD
+    date: toLocalISOString(holiday.date), // Format YYYY-MM-DD
     recurring: holiday.recurring,
   }))
+}
+
+function toLocalISOString(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0") 
+  const day = String(date.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
 }
