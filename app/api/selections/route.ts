@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Fonction pour sélectionner un repas
-export async function selectMeal(
+async function selectMeal(
   userId: string,
   userName: string,
   dayId: string,
@@ -97,7 +97,7 @@ export async function selectMeal(
 }
 
 // Fonction pour récupérer les sélections d'un utilisateur pour une semaine spécifique
-export async function getUserSelectionsForWeek(userId: string, weekOffset = 0): Promise<UserSelection[]> {
+async function getUserSelectionsForWeek(userId: string, weekOffset = 0): Promise<UserSelection[]> {
   try {
     const data = await readData()
     return data.userSelections.filter(
@@ -112,7 +112,7 @@ export async function getUserSelectionsForWeek(userId: string, weekOffset = 0): 
 }
 
 // Fonction pour récupérer les sélections pour un jour d'une semaine spécifique
-export async function getMealSelectionsForDayAndWeek(dayId: string, weekOffset = 0): Promise<UserSelection[]> {
+async function getMealSelectionsForDayAndWeek(dayId: string, weekOffset = 0): Promise<UserSelection[]> {
   try {
     const data = await readData()
     return data.userSelections.filter(
@@ -127,7 +127,7 @@ export async function getMealSelectionsForDayAndWeek(dayId: string, weekOffset =
 }
 
 // Fonction pour récupérer toutes les sélections pour une semaine spécifique
-export async function getAllSelectionsForWeek(weekOffset = 0): Promise<UserSelection[]> {
+async function getAllSelectionsForWeek(weekOffset = 0): Promise<UserSelection[]> {
   try {
     const data = await readData()
     return data.userSelections.filter(

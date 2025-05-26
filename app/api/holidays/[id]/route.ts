@@ -2,8 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { readData, updateData } from "@/lib/json-utils"
 
 // DELETE /api/holidays/:id - Supprimer un jour férié
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const params = await context.params
     const { id } = params
     const data = await readData()
 

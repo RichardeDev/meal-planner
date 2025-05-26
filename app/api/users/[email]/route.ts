@@ -26,10 +26,10 @@ import { sendEmail } from "@/lib/email-utils";
 // GET /api/users/[email] - Récupérer un utilisateur par email
 export async function GET(
   request: NextRequest,
-  { params }: { params: { email: string } }
+  context: { params: Promise<{ email: string }> }
 ) {
   try {
-    const resolveParams = await params;
+    const resolveParams = await context.params;
     const { email } = resolveParams;
     const decodedEmail = decodeURIComponent(email);
     const data = await readData();

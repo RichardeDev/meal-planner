@@ -29,8 +29,9 @@ export async function POST(request: NextRequest) {
 }
 
 // PUT /api/meals/:id - Mettre à jour un repas
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const params = await context.params
     const { id } = params
     const updatedMeal = (await request.json()) as Omit<Meal, "id">
 
@@ -52,8 +53,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 // DELETE /api/meals/:id - Supprimer un repas
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const params = await context.params
     const { id } = params
     const isUsed = await deleteMeal(id)
 
@@ -68,7 +70,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 }
 
 // Fonction pour créer un nouveau repas
-export async function createMeal(name: string, description: string): Promise<Meal> {
+async function createMeal(name: string, description: string): Promise<Meal> {
   const newMeal: Omit<Meal, "id"> = {
     name,
     description,
@@ -88,7 +90,7 @@ export async function createMeal(name: string, description: string): Promise<Mea
 }
 
 // Fonction pour mettre à jour les détails d'un repas
-export async function updateMealDetails(mealId: string, name: string, description: string): Promise<boolean> {
+async function updateMealDetails(mealId: string, name: string, description: string): Promise<boolean> {
   let found = false
 
   await updateData("meals", (meals) => {
@@ -125,7 +127,7 @@ export async function updateMealDetails(mealId: string, name: string, descriptio
 }
 
 // Fonction pour supprimer un repas
-export async function deleteMeal(mealId: string): Promise<boolean> {
+async function deleteMeal(mealId: string): Promise<boolean> {
   // Vérifier si le repas est utilisé dans une semaine
   const data = await readData()
   let isUsed = false

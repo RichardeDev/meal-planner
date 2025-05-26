@@ -34,14 +34,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Erreur lors de la création de l'utilisateur" }, { status: 500 })
   }
 }
-
-// GET /api/users/email/:email - Récupérer un utilisateur par email
-export async function getUserByEmail(email: string): Promise<User | undefined> {
-  try {
-    const data = await readData()
-    return data.users.find((user) => user.email === email)
-  } catch (error) {
-    console.error("Erreur lors de la récupération de l'utilisateur par email:", error)
-    return undefined
-  }
-}
