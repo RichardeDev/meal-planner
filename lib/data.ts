@@ -3,11 +3,11 @@ import type { User, Meal, DayMeals, UserSelection } from "@/lib/json-utils"
 // Fonctions d'API pour les utilisateurs
 export async function getUserByEmail(email: string): Promise<User | undefined> {
   try {
+    // Encoder l'email pour éviter les problèmes avec les caractères spéciaux comme @
     const encodedEmail = encodeURIComponent(email)
     const response = await fetch(`/api/users/${encodedEmail}`)
     if (!response.ok) return undefined
-    const user = await response.json()
-    return user
+    return await response.json()
   } catch (error) {
     console.error("Erreur lors de la récupération de l'utilisateur par email:", error)
     return undefined
@@ -132,14 +132,20 @@ export async function removeMeal(dayId: string, mealId: string, weekOffset = 0):
   return data.success
 }
 
-// Fonctions d'API pour les sélections
-export async function selectMeal(userId: string, userName: string, dayId: string, mealId: string): Promise<boolean> {
+// Mettre à jour les fonctions d'API pour les sélections
+export async function selectMeal(
+  userId: string,
+  userName: string,
+  dayId: string,
+  mealId: string,
+  weekOffset = 0,
+): Promise<boolean> {
   const response = await fetch("/api/selections", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ userId, userName, dayId, mealId }),
+    body: JSON.stringify({ userId, userName, dayId, mealId, weekOffset }),
   })
 
   if (!response.ok) {
@@ -150,8 +156,8 @@ export async function selectMeal(userId: string, userName: string, dayId: string
   return data.success
 }
 
-export async function getUserSelections(userId: string): Promise<UserSelection[]> {
-  const response = await fetch(`/api/selections?userId=${userId}`)
+export async function getUserSelections(userId: string, weekOffset = 0): Promise<UserSelection[]> {
+  const response = await fetch(`/api/selections?userId=${userId}&weekOffset=${weekOffset}`)
 
   if (!response.ok) {
     return []
@@ -160,8 +166,8 @@ export async function getUserSelections(userId: string): Promise<UserSelection[]
   return await response.json()
 }
 
-export async function getMealSelectionsForDay(dayId: string): Promise<UserSelection[]> {
-  const response = await fetch(`/api/selections?dayId=${dayId}`)
+export async function getMealSelectionsForDay(dayId: string, weekOffset = 0): Promise<UserSelection[]> {
+  const response = await fetch(`/api/selections?dayId=${dayId}&weekOffset=${weekOffset}`)
 
   if (!response.ok) {
     return []
@@ -170,8 +176,8 @@ export async function getMealSelectionsForDay(dayId: string): Promise<UserSelect
   return await response.json()
 }
 
-export async function getAllSelections(): Promise<UserSelection[]> {
-  const response = await fetch("/api/selections")
+export async function getAllSelections(weekOffset = 0): Promise<UserSelection[]> {
+  const response = await fetch(`/api/selections?weekOffset=${weekOffset}`)
 
   if (!response.ok) {
     return []
@@ -343,7 +349,7 @@ export function getDayAvailabilityMessageForAdmin(dateStr: string, weekOffset = 
   }
 
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  today.setHours(0, 0, 0, 0)  
 
   // Extraire le jour et le mois de la chaîne
   const [day, month] = dateStr.split(" ")

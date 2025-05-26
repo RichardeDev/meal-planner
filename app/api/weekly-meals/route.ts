@@ -109,7 +109,6 @@ function getWeekId(weekOffset = 0): string {
   return `${weekYear}-${weekNumber}`
 }
 
-// Remplacer la fonction getWeekDates par cette version corrigée
 const getWeekDates = (weekOffset = 0) => {
   const today = new Date()
 
@@ -141,7 +140,7 @@ const getWeekDates = (weekOffset = 0) => {
 }
 
 // Generate weekly meals for a specific week
-export async function generateWeeklyMeals(weekOffset = 0): Promise<DayMeals[]> {
+async function generateWeeklyMeals(weekOffset = 0): Promise<DayMeals[]> {
   const weekDates = getWeekDates(weekOffset)
   const data = await readData()
   const meals = data.meals
@@ -165,7 +164,7 @@ export async function generateWeeklyMeals(weekOffset = 0): Promise<DayMeals[]> {
 }
 
 // Get weekly meals for a specific week
-export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
+async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
   const data = await readData()
   // Utiliser l'identifiant unique de la semaine au lieu de weekOffset
   const weekId = getWeekId(weekOffset)
@@ -190,7 +189,7 @@ export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]>
 }
 
 // Update a meal in a specific week
-export async function updateMeal(
+async function updateMeal(
   dayId: string,
   oldMealId: string,
   newMealId: string,
@@ -243,7 +242,7 @@ export async function updateMeal(
 }
 
 // Add a meal to a day in a specific week
-export async function addMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
+async function addMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
   const data = await readData()
   // Utiliser l'identifiant unique de la semaine
   const weekId = getWeekId(weekOffset)
@@ -277,7 +276,7 @@ export async function addMeal(dayId: string, mealId: string, weekOffset = 0): Pr
 }
 
 // Remove a meal from a day in a specific week
-export async function removeMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
+async function removeMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
   const data = await readData()
   // Utiliser l'identifiant unique de la semaine
   const weekId = getWeekId(weekOffset)

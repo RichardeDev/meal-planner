@@ -15,6 +15,8 @@ import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import type { User } from "@/lib/data"
 import NotificationIcon from "@/components/notification-icon"
+import AdminNav from "@/components/admin-nav"
+import { LogOut } from "lucide-react"
 
 export default function UserHeader() {
   const pathname = usePathname()
@@ -44,6 +46,10 @@ export default function UserHeader() {
     // Supprimer l'utilisateur du localStorage
     localStorage.removeItem("user")
 
+    // Supprimer les cookies d'authentification
+    document.cookie = "authToken=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    document.cookie = "userRole=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT"
+
     toast.success("Déconnexion réussie", {
       description: "À bientôt!",
     })
@@ -64,11 +70,12 @@ export default function UserHeader() {
               Planifier vos Repas
             </Link>
           </div>
+            {user?.role === "admin" && <AdminNav />}
           <div className="flex items-center gap-4">
             {user?.name && <label className="text-sm">Bonjour, {user.name}</label>}
             <NotificationIcon />
-            <Button variant="ghost" onClick={handleLogoutClick}>
-              Déconnexion
+            <Button variant="ghost" size="icon" onClick={handleLogoutClick} title="Déconnexion">
+              <LogOut className="h-5 w-5" />
             </Button>
           </div>
         </div>
