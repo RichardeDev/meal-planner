@@ -16,26 +16,6 @@
     },
     {
       "id": "3",
-      "name": "Jean Dupont",
-      "email": "jean@example.com",
-      "role": "user"
-    },
-    {
-      "id": "4",
-      "name": "Marie Martin",
-      "email": "marie@example.com",
-      "password": "user123",
-      "role": "user"
-    },
-    {
-      "id": "5",
-      "name": "Pierre Durand",
-      "email": "pierre@example.com",
-      "password": "user123",
-      "role": "user"
-    },
-    {
-      "id": "6",
       "name": "richardet william",
       "email": "richardetwilliam@gmail.com",
       "password": "user123",
@@ -768,6 +748,27 @@
       "userName": "Pierre Durand",
       "dayId": "Mardi",
       "mealId": "4"
+    },
+    {
+      "userId": "6",
+      "userName": "richardet william",
+      "dayId": "Mardi",
+      "mealId": "3",
+      "weekOffset": 0
+    },
+    {
+      "userId": "6",
+      "userName": "richardet william",
+      "dayId": "Mercredi",
+      "mealId": "5",
+      "weekOffset": 0
+    },
+    {
+      "userId": "6",
+      "userName": "richardet william",
+      "dayId": "Vendredi",
+      "mealId": "10",
+      "weekOffset": 0
     }
   ],
   "pendingUsers": [],

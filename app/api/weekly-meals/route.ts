@@ -1,311 +1,236 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { readData, updateData, type DayMeals } from "@/lib/json-utils"
+import { type NextRequest } from "next/server"
+import { NextResponse } from "next/server"
+import { pool } from "@/lib/mysql-utils"
 
-// GET /api/weekly-meals?weekOffset=0 - Récupérer les repas pour une semaine spécifique
+// Types
+type Meal = {
+  id: string
+  name: string
+  description: string
+}
+
+type DayMeals = {
+  day: string
+  date: string // ex: "5 mai"
+  meals: Meal[]
+  isHoliday?: boolean
+  holidayName?: string
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
-    const weekOffset = Number.parseInt(searchParams.get("weekOffset") || "0")
+    const weekOffsetStr = searchParams.get("weekOffset")
+    const weekOffset = weekOffsetStr ? parseInt(weekOffsetStr) : 0
 
-    const weeklyMeals = await getWeeklyMealsForWeek(weekOffset)
-    return NextResponse.json(weeklyMeals)
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la récupération des repas de la semaine" }, { status: 500 })
+    const weekId = getWeekId(new Date(), weekOffset)
+
+    // Récupérer les repas de la semaine depuis la base
+    const [rows]: any = await pool.query("SELECT days FROM weekly_meals WHERE week_key = ?", [weekId])
+
+    if (rows.length === 0) {
+      // Si aucune donnée trouvée, générer des repas par défaut
+      const defaultMeals = await getDefaultMeals()
+      const defaultDays = generateDefaultWeeklyMeals(defaultMeals, weekOffset)
+      return NextResponse.json(defaultDays)
+    }
+
+    // Parser les données stockées en JSON
+    const storedDays = JSON.parse(rows[0].days)
+    return NextResponse.json(storedDays)
+  } catch (error: any) {
+    console.error("Erreur lors de la récupération des repas hebdomadaires:", error.message)
+    return NextResponse.json(
+      { error: "Erreur serveur interne", details: error.message },
+      { status: 500 }
+    )
   }
 }
 
-// PUT /api/weekly-meals/update-meal - Mettre à jour un repas dans une semaine
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { dayId, mealId, weekOffset = 0 } = body
+
+    if (!dayId || !mealId) {
+      return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 })
+    }
+
+    const weekId = getWeekId(new Date(), weekOffset)
+    const meal = await getMealById(mealId)
+
+    if (!meal) {
+      return NextResponse.json({ error: "Repas non trouvé" }, { status: 404 })
+    }
+
+    const [rows]: any = await pool.query("SELECT * FROM weekly_meals WHERE week_key = ?", [weekId])
+    let weekData = rows.length > 0 ? JSON.parse(rows[0].days) : generateDefaultWeeklyMeals([], weekOffset)
+
+    const dayIndex = weekData.findIndex((d: DayMeals) => d.day === dayId)
+    if (dayIndex === -1) {
+      return NextResponse.json({ error: "Jour non trouvé" }, { status: 404 })
+    }
+
+    const existingMeal = weekData[dayIndex].meals.find((m: Meal) => m.id === mealId)
+    if (existingMeal) {
+      return NextResponse.json({ error: "Ce repas est déjà ajouté" }, { status: 409 })
+    }
+
+    weekData[dayIndex].meals.push(meal)
+
+    // Mettre à jour ou insérer la semaine dans la base
+    await updateWeeklyMealsInDB(weekId, weekData)
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error("Erreur lors de l'ajout du repas:", error.message)
+    return NextResponse.json(
+      { error: "Erreur serveur interne", details: error.message },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PUT(request: NextRequest) {
   try {
-    const { dayId, oldMealId, newMealId, weekOffset = 0 } = await request.json()
+    const body = await request.json()
+    const { dayId, oldMealId, newMealId, weekOffset = 0 } = body
 
     if (!dayId || !oldMealId || !newMealId) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 })
     }
 
-    const success = await updateMeal(dayId, oldMealId, newMealId, weekOffset)
+    const weekId = getWeekId(new Date(), weekOffset)
+    const newMeal = await getMealById(newMealId)
 
-    if (!success) {
-      return NextResponse.json({ error: "Repas ou jour non trouvé" }, { status: 404 })
+    if (!newMeal) {
+      return NextResponse.json({ error: "Nouveau repas non trouvé" }, { status: 404 })
     }
 
+    const [rows]: any = await pool.query("SELECT * FROM weekly_meals WHERE week_key = ?", [weekId])
+    if (rows.length === 0) {
+      return NextResponse.json({ error: "Semaine non trouvée" }, { status: 404 })
+    }
+
+    let weekData = JSON.parse(rows[0].days)
+    const dayIndex = weekData.findIndex((d: DayMeals) => d.day === dayId)
+    if (dayIndex === -1) {
+      return NextResponse.json({ error: "Jour non trouvé" }, { status: 404 })
+    }
+
+    const mealIndex = weekData[dayIndex].meals.findIndex((m: Meal) => m.id === oldMealId)
+    if (mealIndex === -1) {
+      return NextResponse.json({ error: "Ancien repas non trouvé" }, { status: 404 })
+    }
+
+    // Remplacer le repas
+    weekData[dayIndex].meals[mealIndex] = newMeal
+    await updateWeeklyMealsInDB(weekId, weekData)
+
     return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la mise à jour du repas" }, { status: 500 })
+  } catch (error: any) {
+    console.error("Erreur lors de la mise à jour du repas:", error.message)
+    return NextResponse.json(
+      { error: "Erreur serveur interne", details: error.message },
+      { status: 500 }
+    )
   }
 }
 
-// POST /api/weekly-meals/add-meal - Ajouter un repas à un jour
-export async function POST(request: NextRequest) {
-  try {
-    const { dayId, mealId, weekOffset = 0 } = await request.json()
-
-    if (!dayId || !mealId) {
-      return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 })
-    }
-
-    const success = await addMeal(dayId, mealId, weekOffset)
-
-    if (!success) {
-      return NextResponse.json({ error: "Repas ou jour non trouvé" }, { status: 404 })
-    }
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de l'ajout du repas" }, { status: 500 })
-  }
-}
-
-// DELETE /api/weekly-meals/remove-meal - Supprimer un repas d'un jour
 export async function DELETE(request: NextRequest) {
   try {
-    const { dayId, mealId, weekOffset = 0 } = await request.json()
+    const body = await request.json()
+    const { dayId, mealId, weekOffset = 0 } = body
 
     if (!dayId || !mealId) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 })
     }
 
-    const success = await removeMeal(dayId, mealId, weekOffset)
+    const weekId = getWeekId(new Date(), weekOffset)
+    const [rows]: any = await pool.query("SELECT * FROM weekly_meals WHERE week_key = ?", [weekId])
 
-    if (!success) {
-      return NextResponse.json({ error: "Repas ou jour non trouvé" }, { status: 404 })
+    if (rows.length === 0) {
+      return NextResponse.json({ error: "Semaine non trouvée" }, { status: 404 })
     }
 
+    let weekData = JSON.parse(rows[0].days)
+    const dayIndex = weekData.findIndex((d: DayMeals) => d.day === dayId)
+    if (dayIndex === -1) {
+      return NextResponse.json({ error: "Jour non trouvé" }, { status: 404 })
+    }
+
+    // Supprimer le repas
+    weekData[dayIndex].meals = weekData[dayIndex].meals.filter((m: Meal) => m.id !== mealId)
+
+    // Mettre à jour en base
+    await updateWeeklyMealsInDB(weekId, weekData)
+
     return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la suppression du repas" }, { status: 500 })
+  } catch (error: any) {
+    console.error("Erreur lors de la suppression du repas:", error.message)
+    return NextResponse.json(
+      { error: "Erreur serveur interne", details: error.message },
+      { status: 500 }
+    )
   }
 }
 
-// Fonction pour obtenir le numéro de semaine ISO d'une date
-function getISOWeekNumber(date: Date): number {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  // Jeudi de la semaine en cours
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
-  // Premier janvier de l'année
-  const firstWeek = new Date(d.getFullYear(), 0, 4)
-  // Ajuster au jeudi de la première semaine
-  firstWeek.setDate(firstWeek.getDate() + 3 - ((firstWeek.getDay() + 6) % 7))
-  // Calculer la différence en semaines
+function getWeekId(date: Date, weekOffset = 0): string {
+  const adjustedDate = new Date(date)
+  adjustedDate.setDate(adjustedDate.getDate() + weekOffset * 7)
+
+  const year = adjustedDate.getFullYear()
+  const month = adjustedDate.getMonth()
+  const day = adjustedDate.getDate()
+
+  const onejan = new Date(year, 0, 1)
   const weekNumber =
-    1 + Math.round(((d.getTime() - firstWeek.getTime()) / 86400000 - 3 + ((firstWeek.getDay() + 6) % 7)) / 7)
-  return weekNumber
+    Math.ceil((((adjustedDate.getTime() - onejan.getTime()) / 86400000 + onejan.getDay() + 1) / 7))
+  return `${year}-W${String(weekNumber).padStart(2, "0")}`
 }
 
-// Fonction pour obtenir l'année de la semaine ISO
-function getISOWeekYear(date: Date): number {
-  const d = new Date(date)
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
-  return d.getFullYear()
+async function getMealById(mealId: string): Promise<Meal | null> {
+  const [rows]: any = await pool.query("SELECT * FROM meals WHERE id = ?", [mealId])
+  return rows.length > 0 ? rows[0] : null
 }
 
-// Fonction pour obtenir l'identifiant unique de la semaine (année-semaine)
-function getWeekId(weekOffset = 0): string {
-  const today = new Date()
-  today.setDate(today.getDate() + weekOffset * 7)
-  const weekNumber = getISOWeekNumber(today)
-  const weekYear = getISOWeekYear(today)
-  return `${weekYear}-${weekNumber}`
+async function getDefaultMeals(): Promise<Meal[]> {
+  const [rows]: any = await pool.query("SELECT * FROM meals")
+  return rows.map((r: any) => ({ id: r.id, name: r.name, description: r.description }))
 }
 
-const getWeekDates = (weekOffset = 0) => {
-  const today = new Date()
-
-  // Trouver le lundi de la semaine actuelle
-  const currentDay = today.getDay() // 0 = dimanche, 1 = lundi, etc.
-  const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1) // Ajuster quand le jour est dimanche
-
-  // Créer une nouvelle date pour le lundi de la semaine demandée
-  const monday = new Date(today)
-  monday.setDate(diff + weekOffset * 7)
-
-  // Réinitialiser les heures pour éviter les problèmes de fuseau horaire
-  monday.setHours(0, 0, 0, 0)
-
-  // Générer les dates pour chaque jour de la semaine (lundi à vendredi)
-  const weekDays = [
-    { name: "Lundi", date: new Date(monday) },
-    { name: "Mardi", date: new Date(monday.getTime() + 86400000) }, // +1 jour en millisecondes
-    { name: "Mercredi", date: new Date(monday.getTime() + 86400000 * 2) }, // +2 jours
-    { name: "Jeudi", date: new Date(monday.getTime() + 86400000 * 3) }, // +3 jours
-    { name: "Vendredi", date: new Date(monday.getTime() + 86400000 * 4) }, // +4 jours
-  ]
-
-  // Formater les dates pour l'affichage
-  return weekDays.map((day) => ({
-    day: day.name,
-    date: day.date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" }),
+function generateDefaultWeeklyMeals(meals: Meal[], weekOffset = 0): DayMeals[] {
+  const weekDates = getWeekDates(weekOffset)
+  return weekDates.map((dayInfo) => ({
+    day: dayInfo.day,
+    date: dayInfo.date,
+    meals: [...meals.slice(0, 3)], // Prendre les 3 premiers repas
   }))
 }
 
-// Generate weekly meals for a specific week
-async function generateWeeklyMeals(weekOffset = 0): Promise<DayMeals[]> {
-  const weekDates = getWeekDates(weekOffset)
-  const data = await readData()
-  const meals = data.meals
-
-  // Use a deterministic approach instead of random
-  return weekDates.map((dayInfo, dayIndex) => {
-    // Select meals based on day index instead of random
-    const startIndex = (dayIndex * 2) % meals.length
-    const dayMeals = [
-      meals[startIndex % meals.length],
-      meals[(startIndex + 1) % meals.length],
-      meals[(startIndex + 2) % meals.length],
-    ]
-
-    return {
-      day: dayInfo.day,
-      date: dayInfo.date,
-      meals: dayMeals,
-    }
-  })
+async function updateWeeklyMealsInDB(weekKey: string, days: DayMeals[]) {
+  const [result]: any = await pool.query(
+    "REPLACE INTO weekly_meals (week_key, days) VALUES (?, ?)",
+    [weekKey, JSON.stringify(days)]
+  )
+  return result.affectedRows > 0
 }
 
-// Get weekly meals for a specific week
-async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
-  const data = await readData()
-  // Utiliser l'identifiant unique de la semaine au lieu de weekOffset
-  const weekId = getWeekId(weekOffset)
+function getWeekDates(weekOffset = 0): { day: string; date: string }[] {
+  const today = new Date()
+  const currentDay = today.getDay()
+  const diff = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1)
+  const monday = new Date(today)
+  monday.setDate(diff + weekOffset * 7)
+  monday.setHours(0, 0, 0, 0)
 
-  // If we already have data for this week, return it
-  if (data.weeklyMealsStorage[weekId]) {
-    return data.weeklyMealsStorage[weekId]
-  }
-
-  // Otherwise, generate new data
-  const newWeeklyMeals = await generateWeeklyMeals(weekOffset)
-
-  // Save to storage
-  await updateData("weeklyMealsStorage", (storage) => {
+  const days = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
+  return days.map((dayName, index) => {
+    const dayDate = new Date(monday)
+    dayDate.setDate(monday.getDate() + index)
     return {
-      ...storage,
-      [weekId]: newWeeklyMeals,
+      day: dayName,
+      date: dayDate.toLocaleDateString("fr-FR", { day: "numeric", month: "long" }),
     }
   })
-
-  return newWeeklyMeals
-}
-
-// Update a meal in a specific week
-async function updateMeal(
-  dayId: string,
-  oldMealId: string,
-  newMealId: string,
-  weekOffset = 0,
-): Promise<boolean> {
-  const data = await readData()
-  // Utiliser l'identifiant unique de la semaine
-  const weekId = getWeekId(weekOffset)
-
-  // Get the meals for the specified week
-  let weekMeals = data.weeklyMealsStorage[weekId]
-  if (!weekMeals) {
-    weekMeals = await getWeeklyMealsForWeek(weekOffset)
-  }
-
-  // Find the day
-  const dayIndex = weekMeals.findIndex((day) => day.day === dayId)
-  if (dayIndex === -1) return false
-
-  // Find the meal in that day
-  const mealIndex = weekMeals[dayIndex].meals.findIndex((meal) => meal.id === oldMealId)
-  if (mealIndex === -1) return false
-
-  // Find the new meal
-  const newMeal = data.meals.find((meal) => meal.id === newMealId)
-  if (!newMeal) return false
-
-  // Update the meal
-  weekMeals[dayIndex].meals[mealIndex] = newMeal
-
-  // Update the storage
-  await updateData("weeklyMealsStorage", (storage) => {
-    return {
-      ...storage,
-      [weekId]: weekMeals,
-    }
-  })
-
-  // Update any user selections that had the old meal
-  await updateData("userSelections", (selections) => {
-    return selections.map((selection) => {
-      if (selection.dayId === dayId && selection.mealId === oldMealId) {
-        return { ...selection, mealId: newMealId }
-      }
-      return selection
-    })
-  })
-
-  return true
-}
-
-// Add a meal to a day in a specific week
-async function addMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
-  const data = await readData()
-  // Utiliser l'identifiant unique de la semaine
-  const weekId = getWeekId(weekOffset)
-
-  // Get the meals for the specified week
-  let weekMeals = data.weeklyMealsStorage[weekId]
-  if (!weekMeals) {
-    weekMeals = await getWeeklyMealsForWeek(weekOffset)
-  }
-
-  // Find the day
-  const dayIndex = weekMeals.findIndex((day) => day.day === dayId)
-  if (dayIndex === -1) return false
-
-  // Find the meal
-  const meal = data.meals.find((meal) => meal.id === mealId)
-  if (!meal) return false
-
-  // Add the meal to that day
-  weekMeals[dayIndex].meals.push(meal)
-
-  // Update the storage
-  await updateData("weeklyMealsStorage", (storage) => {
-    return {
-      ...storage,
-      [weekId]: weekMeals,
-    }
-  })
-
-  return true
-}
-
-// Remove a meal from a day in a specific week
-async function removeMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
-  const data = await readData()
-  // Utiliser l'identifiant unique de la semaine
-  const weekId = getWeekId(weekOffset)
-
-  // Get the meals for the specified week
-  let weekMeals = data.weeklyMealsStorage[weekId]
-  if (!weekMeals) {
-    weekMeals = await getWeeklyMealsForWeek(weekOffset)
-  }
-
-  // Find the day
-  const dayIndex = weekMeals.findIndex((day) => day.day === dayId)
-  if (dayIndex === -1) return false
-
-  // Remove the meal from that day
-  weekMeals[dayIndex].meals = weekMeals[dayIndex].meals.filter((meal) => meal.id !== mealId)
-
-  // Update the storage
-  await updateData("weeklyMealsStorage", (storage) => {
-    return {
-      ...storage,
-      [weekId]: weekMeals,
-    }
-  })
-
-  // Remove any user selections for this meal
-  await updateData("userSelections", (selections) => {
-    return selections.filter((selection) => !(selection.dayId === dayId && selection.mealId === mealId))
-  })
-
-  return true
 }

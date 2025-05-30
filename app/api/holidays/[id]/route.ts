@@ -1,95 +1,86 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { readData, updateData } from "@/lib/json-utils"
+import { pool } from "@/lib/mysql-utils"
 
-// DELETE /api/holidays/:id - Supprimer un jour férié
-export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const params = await context.params
     const { id } = params
-    const data = await readData()
 
-    if (!data.holidays) {
+    // Récupérer le jour férié avant suppression
+    const [rows]: any = await pool.query("SELECT * FROM holidays WHERE id = ?", [id])
+
+    if (rows.length === 0) {
       return NextResponse.json({ message: "Jour férié non trouvé" }, { status: 404 })
     }
 
-    const holidayIndex = data.holidays.findIndex((h) => h.id === id)
-    if (holidayIndex === -1) {
-      return NextResponse.json({ message: "Jour férié non trouvé" }, { status: 404 })
-    }
-
-    const holiday = data.holidays[holidayIndex]
+    const holiday = rows[0]
 
     // Supprimer le jour férié
-    data.holidays.splice(holidayIndex, 1)
-    await updateData("holidays", () => data.holidays || [])
+    await pool.query("DELETE FROM holidays WHERE id = ?", [id])
 
-    // Mettre à jour les repas de la semaine pour ne plus marquer ce jour comme férié
-    await removeHolidayFromWeeklyMeals(holiday)
+    // Retirer le flag isHoliday dans les repas
+    await removeHolidayFromWeeklyMeals(id, holiday.name, holiday.date)
 
     return NextResponse.json({ message: "Jour férié supprimé avec succès" })
   } catch (error) {
     console.error("Erreur lors de la suppression du jour férié:", error)
-    return NextResponse.json({ message: "Erreur lors de la suppression du jour férié" }, { status: 500 })
+    return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
   }
 }
 
-// Fonction pour mettre à jour les repas de la semaine pour ne plus marquer un jour comme férié
-async function removeHolidayFromWeeklyMeals(holiday: any) {
-  const data = await readData()
-  const holidayDate = new Date(holiday.date)
+/**
+ * Fonction pour mettre à jour les repas de la semaine pour ne plus marquer ce jour comme férié
+ */
+async function removeHolidayFromWeeklyMeals(holidayId: string, holidayName: string, holidayDateStr: string) {
+  const holidayDate = new Date(holidayDateStr)
 
-  // Pour chaque semaine stockée
-  for (const weekOffset in data.weeklyMealsStorage) {
-    const weekMeals = data.weeklyMealsStorage[weekOffset]
-    let updated = false
+  try {
+    const [weeks]: any = await pool.query("SELECT week_key, days FROM weekly_meals")
 
-    // Pour chaque jour de la semaine
-    for (const day of weekMeals) {
-      // Si ce jour était marqué comme ce jour férié spécifique
-      if (day.isHoliday && day.holidayName === holiday.name) {
-        // Convertir la date du jour (ex: "15 avril") en objet Date
-        const [dayNum, monthName] = day.date.split(" ")
+    for (const weekRow of weeks) {
+      let days = JSON.parse(weekRow.days)
+      let updated = false
 
-        // Mapper les noms de mois français vers leurs indices (0-11)
-        const monthMap: Record<string, number> = {
-          janvier: 0,
-          février: 1,
-          mars: 2,
-          avril: 3,
-          mai: 4,
-          juin: 5,
-          juillet: 6,
-          août: 7,
-          septembre: 8,
-          octobre: 9,
-          novembre: 10,
-          décembre: 11,
-        }
+      for (const day of days) {
+        if (day.isHoliday && day.holidayName === holidayName) {
+          const [dayNum, monthName] = day.date.split(" ")
+          const monthMap: Record<string, number> = {
+            janvier: 0,
+            février: 1,
+            mars: 2,
+            avril: 3,
+            mai: 4,
+            juin: 5,
+            juillet: 6,
+            août: 7,
+            septembre: 8,
+            octobre: 9,
+            novembre: 10,
+            décembre: 11,
+          }
 
-        // Créer une date pour ce jour
-        const dayDate = new Date(holidayDate.getFullYear(), monthMap[monthName], Number.parseInt(dayNum))
+          const dayDate = new Date(holidayDate.getFullYear(), monthMap[monthName], parseInt(dayNum))
+          const isHoliday = dayDate.toISOString().split("T")[0] === holidayDate.toISOString().split("T")[0]
 
-        // Si c'est un jour férié récurrent, on compare seulement le jour et le mois
-        const isHoliday = holiday.recurring
-          ? dayDate.getDate() === holidayDate.getDate() && dayDate.getMonth() === holidayDate.getMonth()
-          : dayDate.getDate() === holidayDate.getDate() &&
-            dayDate.getMonth() === holidayDate.getMonth() &&
-            dayDate.getFullYear() === holidayDate.getFullYear()
-
-        if (isHoliday) {
-          delete day.isHoliday
-          delete day.holidayName
-          updated = true
+          if (isHoliday) {
+            delete day.isHoliday
+            delete day.holidayName
+            updated = true
+          }
         }
       }
-    }
 
-    // Si des modifications ont été apportées, mettre à jour le stockage
-    if (updated) {
-      data.weeklyMealsStorage[weekOffset] = weekMeals
+      if (updated) {
+        await pool.query("UPDATE weekly_meals SET days = ? WHERE week_key = ?", [
+          JSON.stringify(days),
+          weekRow.week_key,
+        ])
+      }
     }
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour des repas:", error)
   }
-
-  // Enregistrer les modifications
-  await updateData("weeklyMealsStorage", () => data.weeklyMealsStorage)
 }

@@ -1,36 +1,54 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { readData, updateData, type User } from "@/lib/json-utils"
+import { pool } from "@/lib/mysql-utils"
 
-// GET /api/users - Récupérer tous les utilisateurs
+
+
 export async function GET(request: NextRequest) {
   try {
-    const data = await readData()
-    return NextResponse.json(data.users)
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la récupération des utilisateurs" }, { status: 500 })
+    const [rows] = await pool.query("SELECT id, name, email, role FROM users")
+    return NextResponse.json(rows)
+  } catch (error: any) {
+    console.error("Erreur lors de la récupération des utilisateurs:", error.message)
+    return NextResponse.json(
+      { error: "Erreur serveur interne", details: error.message },
+      { status: 500 }
+    )
   }
 }
 
-// POST /api/users - Créer un nouvel utilisateur
 export async function POST(request: NextRequest) {
   try {
-    const newUser = (await request.json()) as User
+    const body = await request.json()
+    const { name, email, role } = body
 
     // Validation de base
-    if (!newUser.name || !newUser.email || !newUser.role) {
+    if (!name || !email || !role) {
       return NextResponse.json({ error: "Données utilisateur incomplètes" }, { status: 400 })
     }
 
-    await updateData("users", (users) => {
-      // Générer un nouvel ID
-      const newId = (Math.max(...users.map((user) => Number.parseInt(user.id)), 0) + 1).toString()
-      newUser.id = newId
+    // Vérifier si l'utilisateur existe déjà
+    const [existingUsers]: any = await pool.query("SELECT * FROM users WHERE email = ?", [email])
+    if (existingUsers.length > 0) {
+      return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 409 })
+    }
 
-      return [...users, newUser]
-    })
+    // Générer un nouvel ID utilisateur
+    const id = Date.now().toString()
 
-    return NextResponse.json(newUser, { status: 201 })
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la création de l'utilisateur" }, { status: 500 })
+    // Insérer l'utilisateur en base de données
+    await pool.query("INSERT INTO users (name, email, role) VALUES (?, ?, ?)", [
+      name,
+      email,
+      role,
+    ])
+
+    return NextResponse.json({ id, name, email, role }, { status: 201 })
+  } catch (error: any) {
+    console.error("Erreur lors de la création d'un utilisateur:", error.message)
+    return NextResponse.json(
+      { error: "Erreur serveur interne", details: error.message },
+      { status: 500 }
+    )
   }
 }

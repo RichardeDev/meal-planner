@@ -1,155 +1,143 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { readData, updateData, type Meal } from "@/lib/json-utils"
+import { pool } from "@/lib/mysql-utils"
+
 
 // GET /api/meals - Récupérer tous les repas
 export async function GET(request: NextRequest) {
   try {
-    const data = await readData()
-    return NextResponse.json(data.meals)
+    const [rows] = await pool.query("SELECT * FROM meals")
+    return NextResponse.json(rows)
   } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la récupération des repas" }, { status: 500 })
+    console.error("Erreur lors de la récupération des repas:", error)
+    return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
   }
 }
 
-// POST /api/meals - Créer un nouveau repas
 export async function POST(request: NextRequest) {
   try {
-    const newMeal = (await request.json()) as Omit<Meal, "id">
+    const body = await request.json()
+    const { name, description } = body
 
-    // Validation de base
-    if (!newMeal.name) {
-      return NextResponse.json({ error: "Le nom du repas est requis" }, { status: 400 })
+    // Validation basique
+    if (!name || !description) {
+      return NextResponse.json({ error: "Nom et description sont requis" }, { status: 400 })
     }
 
-    const createdMeal = await createMeal(newMeal.name, newMeal.description || "")
-    return NextResponse.json(createdMeal, { status: 201 })
-  } catch (error) {
+    // Insérer dans la base de données
+    await pool.query(
+      "INSERT INTO meals (name, description) VALUES (?, ?)",
+      [name, description]
+    )
+
+    return NextResponse.json({name, description }, { status: 201 })
+  } catch (error: any) {
+    console.error("Erreur lors de la création du repas:", error.message)
     return NextResponse.json({ error: "Erreur lors de la création du repas" }, { status: 500 })
   }
 }
 
-// PUT /api/meals/:id - Mettre à jour un repas
-export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const params = await context.params
     const { id } = params
-    const updatedMeal = (await request.json()) as Omit<Meal, "id">
+    const body = await request.json()
+    const { name, description } = body
 
-    // Validation de base
-    if (!updatedMeal.name) {
-      return NextResponse.json({ error: "Le nom du repas est requis" }, { status: 400 })
+    if (!name || !description) {
+      return NextResponse.json({ error: "Nom et description sont requis" }, { status: 400 })
     }
 
-    const success = await updateMealDetails(id, updatedMeal.name, updatedMeal.description || "")
-
-    if (!success) {
+    // Vérifier si le repas existe
+    const [existingRows]: any = await pool.query("SELECT * FROM meals WHERE id = ?", [id])
+    if (existingRows.length === 0) {
       return NextResponse.json({ error: "Repas non trouvé" }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la mise à jour du repas" }, { status: 500 })
+    // Mettre à jour le repas
+    await pool.query("UPDATE meals SET name = ?, description = ? WHERE id = ?", [
+      name,
+      description,
+      id,
+    ])
+
+    // Mettre à jour dans tous les repas hebdomadaires
+    await updateMealInWeeklyMeals(id, name, description)
+
+    return NextResponse.json({ success: true, id, name, description })
+  } catch (error: any) {
+    console.error("Erreur lors de la mise à jour du repas:", error.message)
+    return NextResponse.json(
+      { error: "Erreur serveur interne", details: error.message },
+      { status: 500 }
+    )
   }
 }
 
-// DELETE /api/meals/:id - Supprimer un repas
-export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const params = await context.params
     const { id } = params
-    const isUsed = await deleteMeal(id)
 
+    // Vérifier si le repas est utilisé dans weekly_meals
+    const isUsed = await isMealUsed(id)
     if (isUsed) {
-      return NextResponse.json({ error: "Ce repas est utilisé et ne peut pas être supprimé" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Ce repas est utilisé et ne peut pas être supprimé" },
+        { status: 400 }
+      )
     }
 
+    // Supprimer le repas
+    await pool.query("DELETE FROM meals WHERE id = ?", [id])
+
+    // Supprimer aussi toutes les sélections liées
+    await pool.query("DELETE FROM user_selections WHERE meal_id = ?", [id])
+
     return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la suppression du repas" }, { status: 500 })
+  } catch (error: any) {
+    console.error("Erreur lors de la suppression du repas:", error.message)
+    return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
   }
 }
 
-// Fonction pour créer un nouveau repas
-async function createMeal(name: string, description: string): Promise<Meal> {
-  const newMeal: Omit<Meal, "id"> = {
-    name,
-    description,
-  }
+async function updateMealInWeeklyMeals(mealId: string, name: string, description: string) {
+  const [weeks]: any = await pool.query("SELECT week_key, days FROM weekly_meals")
 
-  let createdMeal: Meal = { id: "", ...newMeal }
+  for (const week of weeks) {
+    const days = JSON.parse(week.days)
 
-  await updateData("meals", (meals) => {
-    // Générer un nouvel ID
-    const newId = (Math.max(...meals.map((meal) => Number.parseInt(meal.id)), 0) + 1).toString()
-    createdMeal = { id: newId, ...newMeal }
+    let updated = false
 
-    return [...meals, createdMeal]
-  })
-
-  return createdMeal
-}
-
-// Fonction pour mettre à jour les détails d'un repas
-async function updateMealDetails(mealId: string, name: string, description: string): Promise<boolean> {
-  let found = false
-
-  await updateData("meals", (meals) => {
-    const index = meals.findIndex((meal) => meal.id === mealId)
-    if (index === -1) return meals
-
-    found = true
-    meals[index] = { ...meals[index], name, description }
-    return [...meals]
-  })
-
-  if (found) {
-    // Mettre à jour les repas dans les jours de la semaine pour toutes les semaines
-    await updateData("weeklyMealsStorage", (storage) => {
-      const updatedStorage = { ...storage }
-
-      Object.keys(updatedStorage).forEach((weekKey) => {
-        const weekMeals = updatedStorage[weekKey]
-
-        weekMeals.forEach((day) => {
-          day.meals.forEach((meal, index) => {
-            if (meal.id === mealId) {
-              day.meals[index] = { id: mealId, name, description }
-            }
-          })
-        })
-      })
-
-      return updatedStorage
-    })
-  }
-
-  return found
-}
-
-// Fonction pour supprimer un repas
-async function deleteMeal(mealId: string): Promise<boolean> {
-  // Vérifier si le repas est utilisé dans une semaine
-  const data = await readData()
-  let isUsed = false
-
-  Object.values(data.weeklyMealsStorage).forEach((weekMeals) => {
-    weekMeals.forEach((day) => {
-      if (day.meals.some((meal) => meal.id === mealId)) {
-        isUsed = true
+    for (const day of days) {
+      for (const meal of day.meals) {
+        if (meal.id === mealId) {
+          meal.name = name
+          meal.description = description
+          updated = true
+        }
       }
-    })
-  })
+    }
 
-  // Si le repas est utilisé, ne pas le supprimer
-  if (isUsed) {
-    return true // Retourne true pour indiquer que le repas est utilisé
+    if (updated) {
+      await pool.query("UPDATE weekly_meals SET days = ? WHERE week_key = ?", [
+        JSON.stringify(days),
+        week.week_key,
+      ])
+    }
   }
+}
 
-  // Supprimer le repas de la liste
-  await updateData("meals", (meals) => meals.filter((meal) => meal.id !== mealId))
-
-  // Supprimer les sélections associées à ce repas
-  await updateData("userSelections", (selections) => selections.filter((selection) => selection.mealId !== mealId))
-
-  return false // Retourne false pour indiquer que le repas a été supprimé
+async function isMealUsed(mealId: string): Promise<boolean> {
+  const [selections]: any = await pool.query(
+    "SELECT COUNT(*) AS count FROM user_selections WHERE meal_id = ?",
+    [mealId]
+  )
+  return selections[0].count > 0
 }

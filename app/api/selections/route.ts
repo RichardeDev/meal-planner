@@ -1,46 +1,50 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { readData, updateData, type UserSelection } from "@/lib/json-utils"
 
-// GET /api/selections - Récupérer toutes les sélections
+import { pool } from "@/lib/mysql-utils"
+
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
+    const searchParams = new URL(request.url).searchParams
     const userId = searchParams.get("userId")
     const dayId = searchParams.get("dayId")
-    const weekOffset = searchParams.get("weekOffset")
+    const weekOffsetStr = searchParams.get("weekOffset")
 
-    const data = await readData()
-    let selections = data.userSelections
+    let query = "SELECT * FROM user_selections WHERE 1=1"
+    const queryParams: any[] = []
 
-    // Filtrer par utilisateur si spécifié
     if (userId) {
-      selections = selections.filter((selection) => selection.userId === userId)
+      query += " AND userId = ?"
+      queryParams.push(userId)
     }
 
-    // Filtrer par jour si spécifié
     if (dayId) {
-      selections = selections.filter((selection) => selection.dayId === dayId)
+      query += " AND dayId = ?"
+      queryParams.push(dayId)
     }
 
-    // Filtrer par semaine si spécifié
-    if (weekOffset !== null) {
-      const weekOffsetNum = Number.parseInt(weekOffset)
-      selections = selections.filter(
-        (selection) =>
-          selection.weekOffset === weekOffsetNum || (selection.weekOffset === undefined && weekOffsetNum === 0), // Pour la compatibilité avec les anciennes données
-      )
+    if (weekOffsetStr !== null && weekOffsetStr !== "") {
+      const weekOffset = parseInt(weekOffsetStr, 10)
+      query += " AND weekOffset = ?"
+      queryParams.push(weekOffset)
+    } else {
+      // Si non spécifié, charger la semaine actuelle (weekOffset = 0)
+      query += " AND (weekOffset = 0 OR weekOffset IS NULL)"
     }
 
-    return NextResponse.json(selections)
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la récupération des sélections" }, { status: 500 })
+    const [rows] = await pool.query(query, queryParams)
+
+    return NextResponse.json(rows)
+  } catch (error: any) {
+    console.error("Erreur lors de la récupération des sélections:", error.message)
+    return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
   }
 }
 
-// POST /api/selections - Créer ou mettre à jour une sélection
 export async function POST(request: NextRequest) {
   try {
-    const { userId, userName, dayId, mealId, weekOffset = 0 } = await request.json()
+    const body = await request.json()
+    const { userId, userName, dayId, mealId, weekOffset = 0 } = body
 
     if (!userId || !userName || !dayId || !mealId) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 })
@@ -49,92 +53,46 @@ export async function POST(request: NextRequest) {
     const success = await selectMeal(userId, userName, dayId, mealId, weekOffset)
 
     if (!success) {
-      return NextResponse.json({ error: "Erreur lors de la sélection du repas" }, { status: 500 })
+      return NextResponse.json({ error: "Échec de la sélection du repas" }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la sélection du repas" }, { status: 500 })
+    return NextResponse.json({ success: true }, { status: 201 })
+  } catch (error: any) {
+    console.error("Erreur lors de la création d'une sélection:", error.message)
+    return NextResponse.json({ error: "Erreur serveur interne" }, { status: 500 })
   }
 }
 
-// Fonction pour sélectionner un repas
 async function selectMeal(
   userId: string,
   userName: string,
   dayId: string,
   mealId: string,
-  weekOffset = 0,
+  weekOffset: number = 0
 ): Promise<boolean> {
   try {
-    await updateData("userSelections", (selections) => {
-      // Check if user already has a selection for this day and week
-      const existingSelectionIndex = selections.findIndex(
-        (selection) =>
-          selection.userId === userId &&
-          selection.dayId === dayId &&
-          (selection.weekOffset === weekOffset || (selection.weekOffset === undefined && weekOffset === 0)),
+    const [existing]: any = await pool.query(
+      "SELECT * FROM user_selections WHERE userId = ? AND dayId = ? AND weekOffset = ?",
+      [userId, dayId, weekOffset]
+    )
+
+    if (existing.length > 0) {
+      // Mettre à jour la sélection existante
+      await pool.query(
+        "UPDATE user_selections SET mealId = ?, updatedAt = NOW() WHERE userId = ? AND dayId = ? AND weekOffset = ?",
+        [mealId, userId, dayId, weekOffset]
       )
-
-      if (existingSelectionIndex !== -1) {
-        // Update existing selection
-        selections[existingSelectionIndex].mealId = mealId
-        // Ensure weekOffset is set
-        selections[existingSelectionIndex].weekOffset = weekOffset
-      } else {
-        // Add new selection
-        selections.push({ userId, userName, dayId, mealId, weekOffset })
-      }
-
-      return selections
-    })
+    } else {
+      // Créer une nouvelle sélection
+      await pool.query(
+        "INSERT INTO user_selections (userId, userName, dayId, mealId, weekOffset, selectedAt) VALUES (?, ?, ?, ?, ?, NOW())",
+        [userId, userName, dayId, mealId, weekOffset]
+      )
+    }
 
     return true
-  } catch (error) {
-    console.error("Erreur lors de la sélection du repas:", error)
+  } catch (error: any) {
+    console.error("Erreur dans la fonction selectMeal:", error.message)
     return false
-  }
-}
-
-// Fonction pour récupérer les sélections d'un utilisateur pour une semaine spécifique
-async function getUserSelectionsForWeek(userId: string, weekOffset = 0): Promise<UserSelection[]> {
-  try {
-    const data = await readData()
-    return data.userSelections.filter(
-      (selection) =>
-        selection.userId === userId &&
-        (selection.weekOffset === weekOffset || (selection.weekOffset === undefined && weekOffset === 0)),
-    )
-  } catch (error) {
-    console.error("Erreur lors de la récupération des sélections de l'utilisateur:", error)
-    return []
-  }
-}
-
-// Fonction pour récupérer les sélections pour un jour d'une semaine spécifique
-async function getMealSelectionsForDayAndWeek(dayId: string, weekOffset = 0): Promise<UserSelection[]> {
-  try {
-    const data = await readData()
-    return data.userSelections.filter(
-      (selection) =>
-        selection.dayId === dayId &&
-        (selection.weekOffset === weekOffset || (selection.weekOffset === undefined && weekOffset === 0)),
-    )
-  } catch (error) {
-    console.error("Erreur lors de la récupération des sélections pour le jour:", error)
-    return []
-  }
-}
-
-// Fonction pour récupérer toutes les sélections pour une semaine spécifique
-async function getAllSelectionsForWeek(weekOffset = 0): Promise<UserSelection[]> {
-  try {
-    const data = await readData()
-    return data.userSelections.filter(
-      (selection) => selection.weekOffset === weekOffset || (selection.weekOffset === undefined && weekOffset === 0),
-    )
-  } catch (error) {
-    console.error("Erreur lors de la récupération de toutes les sélections:", error)
-    return []
   }
 }

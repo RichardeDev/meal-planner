@@ -1,12 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { readData } from "@/lib/json-utils"
+import { pool } from "@/lib/mysql-utils"
 
-// GET /api/users/pending - Récupérer tous les utilisateurs en attente
 export async function GET(request: NextRequest) {
   try {
-    const data = await readData()
-    return NextResponse.json(data.pendingUsers || [])
-  } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la récupération des utilisateurs en attente" }, { status: 500 })
+    const [rows] = await pool.query("SELECT id, name, email, role FROM pending_users")
+    return NextResponse.json(rows)
+  } catch (error: any) {
+    console.error("Erreur lors de la récupération des utilisateurs en attente:", error.message)
+    return NextResponse.json(
+      { error: "Erreur serveur interne", details: error.message },
+      { status: 500 }
+    )
   }
 }
