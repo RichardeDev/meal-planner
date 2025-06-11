@@ -4,6 +4,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SonnerProvider } from "@/components/sonner-provider"
 import { QueryProvider } from "@/components/query-provider"
+import { SessionProvider } from "@/components/session-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -27,7 +28,7 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {children}
+            <SessionProvider>{children}</SessionProvider>
             <SonnerProvider />
           </ThemeProvider>
         </QueryProvider>

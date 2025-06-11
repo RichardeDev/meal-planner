@@ -52,6 +52,7 @@ export type UserSelection = {
   dayId: string
   mealId: string
   weekOffset?: number
+  weekKey?: string
 }
 
 export type Holiday = {

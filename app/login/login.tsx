@@ -12,39 +12,53 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import { getUserByEmail } from "@/lib/data"
 import Link from "next/link";
+import { useSession } from "@/components/session-provider";
 
 
 export default function LoginClientPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+  const { login } = useSession()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
 
-    
-    const user = await getUserByEmail(email);
+    try {
+      const user = await getUserByEmail(email)
 
-    if (user && user.role === "admin" && user.password === password) {
-      localStorage.setItem("user", JSON.stringify(user));
-      document.cookie = `authToken=${btoa(user.email + ":" + user.password)};path=/;max-age=86400`
-      document.cookie = `userRole=admin;path=/;max-age=86400`
-      toast.success("Connexion réussie", {
-        description: `Bienvenue, ${user.name}!`,
-      });
-      router.push("/admin/dashboard");
-    } else if (user && user.role === "user" && user.password === password) {
-      localStorage.setItem("user", JSON.stringify(user));
-      document.cookie = `authToken=${btoa(user.email + ":" + user.password)};path=/;max-age=86400`
-      document.cookie = `userRole=user;path=/;max-age=86400`
-      toast.success("Connexion réussie", {
-        description: `Bienvenue, ${user.name}!`,
-      });
-      router.push("/user/dashboard");
-    } else {
+      if (user && user.password === password) {
+        login({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          password: user.password, 
+        })
+
+        toast.success("Connexion réussie", {
+          description: `Bienvenue, ${user.name}!`,
+        })
+
+        if (user.role === "admin") {
+          router.push("/admin/dashboard/planning")
+        } else {
+          router.push("/user/dashboard")
+        }
+      } else {
+        toast.error("Erreur de connexion", {
+          description: "Email ou mot de passe incorrect",
+        })
+      }
+    } catch (error) {
+      console.error("Erreur lors de la connexion:", error)
       toast.error("Erreur de connexion", {
-        description: "Email ou mot de passe incorrect",
-      });
+        description: "Une erreur est survenue lors de la connexion",
+      })
+    } finally {
+      setIsLoading(false)
     }
   };
 

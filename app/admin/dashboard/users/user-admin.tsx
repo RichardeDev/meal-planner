@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { CheckCircle, XCircle, Edit, Trash2, UserPlus } from "lucide-react"
 import type { User, PendingUser } from "@/lib/json-utils"
+import { addNewUser, deleteUser, getAllUsers, getPendingUsers, updateUser, validateUser } from "@/lib/data"
 
 export default function UsersAdminClientPage() {
   const [users, setUsers] = useState<User[]>([])
@@ -35,16 +36,11 @@ export default function UsersAdminClientPage() {
     const fetchUsers = async () => {
       setIsLoading(true)
       try {
-        // Récupérer les utilisateurs
-        const usersResponse = await fetch("/api/users")
-        if (!usersResponse.ok) throw new Error("Erreur lors de la récupération des utilisateurs")
-        const usersData = await usersResponse.json()
+        const usersData = await getAllUsers()
         setUsers(usersData)
 
         // Récupérer les utilisateurs en attente
-        const pendingUsersResponse = await fetch("/api/users/pending")
-        if (!pendingUsersResponse.ok) throw new Error("Erreur lors de la récupération des utilisateurs en attente")
-        const pendingUsersData = await pendingUsersResponse.json()
+        const pendingUsersData = await getPendingUsers()
         setPendingUsers(pendingUsersData)
       } catch (error) {
         console.error("Erreur:", error)
@@ -61,20 +57,7 @@ export default function UsersAdminClientPage() {
 
   const handleCreateUser = async () => {
     try {
-      const response = await fetch("/api/users", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newUser),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Erreur lors de la création de l'utilisateur")
-      }
-
-      const createdUser = await response.json()
+      const createdUser = await addNewUser(newUser.name, newUser.email, newUser.password, newUser.role)
       setUsers([...users, createdUser])
       setIsCreateDialogOpen(false)
       setNewUser({ name: "", email: "", password: "", role: "user" })
@@ -94,18 +77,7 @@ export default function UsersAdminClientPage() {
     if (!editingUser) return
 
     try {
-      const response = await fetch(`/api/users/${editingUser.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(editingUser),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Erreur lors de la modification de l'utilisateur")
-      }
+      await updateUser(editingUser)
 
       setUsers(users.map((user) => (user.id === editingUser.id ? editingUser : user)))
       setIsEditDialogOpen(false)
@@ -126,14 +98,7 @@ export default function UsersAdminClientPage() {
     if (!userToDelete) return
 
     try {
-      const response = await fetch(`/api/users/${userToDelete.id}`, {
-        method: "DELETE",
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Erreur lors de la suppression de l'utilisateur")
-      }
+      await deleteUser(userToDelete.id)
 
       setUsers(users.filter((user) => user.id !== userToDelete.id))
       setIsDeleteDialogOpen(false)
@@ -152,20 +117,7 @@ export default function UsersAdminClientPage() {
 
   const handleValidateUser = async (pendingUserId: string, action: "approve" | "reject") => {
     try {
-      const response = await fetch("/api/auth/validate-user", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ pendingUserId, action }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(
-          error.message || `Erreur lors de la ${action === "approve" ? "validation" : "rejet"} de l'utilisateur`,
-        )
-      }
+      await validateUser(pendingUserId, action)
 
       // Mettre à jour la liste des utilisateurs en attente
       setPendingUsers(pendingUsers.filter((user) => user.id !== pendingUserId))

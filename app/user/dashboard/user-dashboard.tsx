@@ -9,6 +9,8 @@ import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import UserHeader from "@/components/user-header"
 import {
+  type DayMeals,
+  type UserSelection,
   getWeeklyMealsForWeek,
   selectMeal,
   getUserSelections,
@@ -17,31 +19,12 @@ import {
   isThursdayOrLater,
 } from "@/lib/data"
 import { toast } from "sonner"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 
-// Composant de chargement pour améliorer l'UX pendant le chargement
-function LoadingState() {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <UserHeader />
-      <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Menu de la Semaine</h1>
-          <p className="text-muted-foreground">Chargement des données...</p>
-        </div>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </div>
-      </main>
-    </div>
-  )
-}
-
-// Composant principal du dashboard utilisateur
 export default function UserDashboardClientPage() {
-  // Utiliser React Query pour la gestion de l'état et la mise en cache
-  const queryClient = useQueryClient()
-  const [currentWeek, setCurrentWeek] = useState<number>(0)
+  const [meals, setMeals] = useState<DayMeals[]>([])
+  const [userSelections, setUserSelections] = useState<UserSelection[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [currentWeek, setCurrentWeek] = useState<number>(0) // 0 = semaine actuelle
 
   // Récupérer l'utilisateur depuis localStorage (côté client uniquement)
   const [user, setUser] = useState<{ id: string; name: string } | null>(null)
@@ -61,55 +44,41 @@ export default function UserDashboardClientPage() {
   const userId = user?.id || "2"
   const userName = user?.name || "Regular User"
 
-  // Requête pour récupérer les repas de la semaine
-  const {
-    data: meals = [],
-    isLoading: isMealsLoading,
-    error: mealsError,
-  } = useQuery({
-    queryKey: ["weeklyMeals", currentWeek],
-    queryFn: () => getWeeklyMealsForWeek(currentWeek),
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    refetchOnWindowFocus: false,
-  })
+  useEffect(() => {
+    // Load meals and user selections
+    const loadData = async () => {
+      setIsLoading(true)
+      try {
+        console.log(`Chargement des données pour la semaine ${currentWeek}`)
 
-  // Requête pour récupérer les sélections de l'utilisateur
-  const {
-    data: userSelections = [],
-    isLoading: isSelectionsLoading,
-    error: selectionsError,
-  } = useQuery({
-    queryKey: ["userSelections", userId, currentWeek],
-    queryFn: () => getUserSelections(userId, currentWeek),
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    refetchOnWindowFocus: false,
-  })
+        const weeklyMeals = await getWeeklyMealsForWeek(currentWeek)
+        setMeals(weeklyMeals)
+        console.log(`Repas chargés pour la semaine ${currentWeek}:`, weeklyMeals)
 
-  // Mutation pour sélectionner un repas
-  const selectMealMutation = useMutation({
-    mutationFn: ({ dayId, mealId }: { dayId: string; mealId: string }) =>
-      selectMeal(userId, userName, dayId, mealId, currentWeek),
-    onSuccess: () => {
-      // Invalider la requête des sélections pour forcer un rafraîchissement
-      queryClient.invalidateQueries({ queryKey: ["userSelections", userId, currentWeek] })
-      toast.success("Repas sélectionné", {
-        description: "Votre choix a été enregistré",
-      })
-    },
-    onError: () => {
-      toast.error("Erreur", {
-        description: "Impossible de sélectionner ce repas",
-      })
-    },
-  })
+        const selections = await getUserSelections(userId, currentWeek)
+        setUserSelections(selections)
+        console.log(`Sélections chargées pour l'utilisateur ${userId}, semaine ${currentWeek}:`, selections)
+      } catch (error) {
+        console.error("Error loading data:", error)
+        toast.error("Erreur", {
+          description: "Impossible de charger les données",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
 
-  // Gérer la sélection d'un repas
+    loadData()
+  }, [userId, currentWeek])
+
+  // Mettre à jour la fonction handleSelectMeal pour inclure le weekOffset
   const handleSelectMeal = async (dayId: string, mealId: string) => {
     // Trouver la date correspondant au jour
     const dayData = meals.find((d) => d.day === dayId)
     if (!dayData) return
 
     // Vérifier si le jour est modifiable (dans le futur)
+    // Pour les utilisateurs simples, utiliser isAdmin=false (par défaut)
     if (!isDayEditable(dayData.date)) {
       toast.error("Sélection impossible", {
         description: getDayAvailabilityMessage(dayData.date),
@@ -125,8 +94,15 @@ export default function UserDashboardClientPage() {
       return
     }
 
-    // Exécuter la mutation
-    selectMealMutation.mutate({ dayId, mealId })
+    await selectMeal(userId, userName, dayId, mealId, currentWeek)
+
+    // Refresh selections
+    const selections = await getUserSelections(userId, currentWeek)
+    setUserSelections(selections)
+
+    toast.success("Repas sélectionné", {
+      description: "Votre choix a été enregistré",
+    })
   }
 
   const getUserSelectionForDay = (dayId: string) => {
@@ -168,23 +144,18 @@ export default function UserDashboardClientPage() {
   }
 
   // Afficher un état de chargement pendant que les données sont récupérées
-  if (isMealsLoading || isSelectionsLoading) {
-    return <LoadingState />
-  }
-
-  // Gérer les erreurs
-  if (mealsError || selectionsError) {
+  if (isLoading) {
     return (
       <div className="flex min-h-screen flex-col">
         <UserHeader />
-        <main className="flex-1 container py-6">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erreur</AlertTitle>
-            <AlertDescription>
-              Une erreur est survenue lors du chargement des données. Veuillez réessayer plus tard.
-            </AlertDescription>
-          </Alert>
+        <main className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <div className="text-center py-8">
+            <h1 className="text-3xl font-bold mb-2">Menu de la Semaine</h1>
+            <p className="text-muted-foreground">Chargement des données...</p>
+          </div>
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
         </main>
       </div>
     )
@@ -228,14 +199,13 @@ export default function UserDashboardClientPage() {
                 <TabsTrigger key={day.day} value={day.day}>
                   {day.day}
                   <span className="ml-2 text-xs text-muted-foreground hidden sm:inline">{day.date}</span>
-                  {day.isHoliday && <span className="ml-1 text-red-500">*</span>}
                 </TabsTrigger>
               ))}
             </TabsList>
 
             {meals.map((day) => {
               // Pour les utilisateurs simples, utiliser isAdmin=false (par défaut)
-              const isEditable = isDayEditable(day.date) 
+              const isEditable = isDayEditable(day.date)
 
               return (
                 <TabsContent key={day.day} value={day.day} className="space-y-4">
@@ -277,13 +247,9 @@ export default function UserDashboardClientPage() {
                                 onClick={() => handleSelectMeal(day.day, meal.id)}
                                 variant={isSelected ? "secondary" : "default"}
                                 className="w-full"
-                                disabled={!isEditable || selectMealMutation.isPending}
+                                disabled={!isEditable}
                               >
-                                {selectMealMutation.isPending
-                                  ? "Chargement..."
-                                  : isSelected
-                                    ? "Sélectionné"
-                                    : "Sélectionner"}
+                                {isSelected ? "Sélectionné" : "Sélectionner"}
                               </Button>
                             </CardFooter>
                           </Card>
@@ -299,44 +265,44 @@ export default function UserDashboardClientPage() {
           <div className="text-center py-8 text-muted-foreground">Aucun repas n'a été configuré pour cette semaine</div>
         )}
 
-          <div className="mt-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>Vos sélections</CardTitle>
-                <CardDescription>Récapitulatif de vos choix pour la semaine</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {userSelections.length > 0 ? (
-                  <div className="space-y-2">
-                    {meals.map((day) => {
-                      const selection = getUserSelectionForDay(day.day)
-                      if (!selection) return null
+        <div className="mt-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Vos sélections</CardTitle>
+              <CardDescription>Récapitulatif de vos choix pour la semaine</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {userSelections.length > 0 ? (
+                <div className="space-y-2">
+                  {meals.map((day) => {
+                    const selection = getUserSelectionForDay(day.day)
+                    if (!selection) return null
 
-                      const meal = getMealById(selection.mealId)
-                      if (!meal) return null
+                    const meal = getMealById(selection.mealId)
+                    if (!meal) return null
 
-                      const isEditable = isDayEditable(day.date)
+                    const isEditable = isDayEditable(day.date)
 
-                      return (
-                        <div key={day.day} className="flex justify-between items-center p-3 border rounded-md">
-                          <div>
-                            <span className="font-medium">{day.day}</span>
-                            <span className="text-sm text-muted-foreground ml-2">{day.date}</span>
-                            {!isEditable && <span className="ml-2 text-xs text-destructive">(Verrouillé)</span>}
-                          </div>
-                          <div className="font-medium">{meal.name}</div>
+                    return (
+                      <div key={day.day} className="flex justify-between items-center p-3 border rounded-md">
+                        <div>
+                          <span className="font-medium">{day.day}</span>
+                          <span className="text-sm text-muted-foreground ml-2">{day.date}</span>
+                          {!isEditable && <span className="ml-2 text-xs text-destructive">(Verrouillé)</span>}
                         </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">
-                    Vous n&apos;avez pas encore fait de sélection
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                        <div className="font-medium">{meal.name}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  Vous n&apos;avez pas encore fait de sélection
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   )

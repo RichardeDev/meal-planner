@@ -22,7 +22,6 @@ import {
   updateMeal,
   addMeal,
   removeMeal,
-  getAllSelections,
   getWeeklyMealsForWeek,
   isDayEditable,
   getDayAvailabilityMessage,
@@ -45,16 +44,35 @@ export default function PlanningClientPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingMeal, setEditingMeal] = useState<{ dayId: string; mealId: string } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  
+
+  // Fonction pour obtenir la clé de semaine (année-semaine)
+  const getWeekKey = (weekOffset: number): string => {
+    const today = new Date()
+    const monday = new Date(today)
+    const dayOfWeek = today.getDay()
+    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
+
+    monday.setDate(diff + weekOffset * 7)
+    monday.setHours(0, 0, 0, 0)
+
+    // Calculer le numéro de semaine dans l'année
+    const startOfYear = new Date(monday.getFullYear(), 0, 1)
+    const weekNumber = Math.ceil(((monday.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
+
+    return `${monday.getFullYear()}-W${weekNumber.toString().padStart(2, "0")}`
+  }
 
   // Charger les repas de la semaine sélectionnée
   useEffect(() => {
     const loadWeeklyMeals = async () => {
       setIsLoading(true)
       try {
+        console.log(`Chargement des données pour la semaine ${currentWeek}`)
+
         // Charger les repas de la semaine
         const weekMeals = await getWeeklyMealsForWeek(currentWeek)
         setMeals(weekMeals)
+        console.log("Repas chargés:", weekMeals)
 
         // Si la semaine change, sélectionner le premier jour par défaut
         if (weekMeals.length > 0) {
@@ -67,9 +85,12 @@ export default function PlanningClientPage() {
         const mealsData = await mealsResponse.json()
         setMealsList(mealsData)
 
-        // Charger les sélections des utilisateurs
-        const selections = await getAllSelections()
-        setUserSelections(selections.filter((s) => s.weekOffset === currentWeek))
+        // Charger les sélections des utilisateurs pour cette semaine spécifique
+        const selectionsResponse = await fetch(`/api/selections?weekOffset=${currentWeek}`)
+        if (!selectionsResponse.ok) throw new Error("Erreur lors du chargement des sélections")
+        const selectionsData = await selectionsResponse.json()
+        setUserSelections(selectionsData)
+        console.log(`Sélections chargées pour la semaine ${currentWeek} (${getWeekKey(currentWeek)}):`, selectionsData)
       } catch (error) {
         console.error("Erreur lors du chargement des repas:", error)
         toast.error("Erreur", {
@@ -81,7 +102,6 @@ export default function PlanningClientPage() {
     }
 
     loadWeeklyMeals()
-
   }, [currentWeek])
 
   const handleViewSelections = async (dayId: string) => {
@@ -169,8 +189,11 @@ export default function PlanningClientPage() {
     setMeals(updatedMeals)
 
     // Recharger les sélections après suppression
-    const selections = await getAllSelections()
-    setUserSelections(selections.filter((s) => s.weekOffset === currentWeek))
+    const selectionsResponse = await fetch(`/api/selections?weekOffset=${currentWeek}`)
+    if (selectionsResponse.ok) {
+      const selectionsData = await selectionsResponse.json()
+      setUserSelections(selectionsData)
+    }
 
     toast.success("Repas supprimé", {
       description: "Le repas a été supprimé avec succès du jour",
@@ -185,8 +208,11 @@ export default function PlanningClientPage() {
     setMeals(updatedMeals)
 
     // Recharger les sélections après modification
-    const selections = await getAllSelections()
-    setUserSelections(selections.filter((s) => s.weekOffset === currentWeek))
+    const selectionsResponse = await fetch(`/api/selections?weekOffset=${currentWeek}`)
+    if (selectionsResponse.ok) {
+      const selectionsData = await selectionsResponse.json()
+      setUserSelections(selectionsData)
+    }
 
     setIsEditDialogOpen(false)
 
@@ -252,7 +278,7 @@ export default function PlanningClientPage() {
       return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
     }
 
-    return `${formatDate(monday)} - ${formatDate(sunday)}`
+    return `${formatDate(monday)} - ${formatDate(sunday)} (${getWeekKey(weekOffset)})`
   }
 
   // Fonction pour exporter les sélections d'un jour en PDF
@@ -301,7 +327,7 @@ export default function PlanningClientPage() {
     })
 
     // Sauvegarder le PDF
-    doc.save(`selections-${dayId.toLowerCase()}.pdf`)
+    doc.save(`selections-${dayId.toLowerCase()}-${getWeekKey(currentWeek)}.pdf`)
 
     toast.success("Export réussi", {
       description: "Le PDF a été généré avec succès",
@@ -321,7 +347,7 @@ export default function PlanningClientPage() {
 
     // Ajouter un titre
     doc.setFontSize(18)
-    doc.text("Sélections de la semaine", 14, 22)
+    doc.text(`Sélections de la semaine ${getWeekKey(currentWeek)}`, 14, 22)
 
     let yPosition = 30
 
@@ -370,9 +396,7 @@ export default function PlanningClientPage() {
     })
 
     // Sauvegarder le PDF
-    doc.save(
-      `selections-semaine-${currentWeek === 0 ? "actuelle" : currentWeek > 0 ? "plus" + currentWeek : "moins" + Math.abs(currentWeek)}.pdf`,
-    )
+    doc.save(`selections-${getWeekKey(currentWeek)}.pdf`)
 
     toast.success("Export réussi", {
       description: "Le PDF a été généré avec succès",
@@ -424,7 +448,7 @@ export default function PlanningClientPage() {
         </Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 w-full mb-6">
+      <div className="grid gap-6  w-full mb-6">
         <Card className="w-full">
           <CardHeader>
             <CardTitle>Repas de la semaine</CardTitle>
@@ -530,7 +554,9 @@ export default function PlanningClientPage() {
           <CardHeader className="flex flex-row justify-between items-center">
             <div>
               <CardTitle>Sélections des utilisateurs</CardTitle>
-              <CardDescription>Consultez les sélections des utilisateurs pour toute la semaine</CardDescription>
+              <CardDescription>
+                Consultez les sélections des utilisateurs pour la semaine
+              </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={exportAllToPDF} disabled={userSelections.length === 0}>
               <FileDown className="h-4 w-4 mr-2" />
@@ -543,8 +569,6 @@ export default function PlanningClientPage() {
                 // Filtrer les sélections pour ce jour
                 const daySelections = userSelections.filter((s) => s.dayId === day.day)
 
-                if (daySelections.length === 0) return null
-
                 return (
                   <div key={day.day} className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -554,15 +578,20 @@ export default function PlanningClientPage() {
                           <span className="ml-2 text-sm font-medium text-red-500">Jour férié: {day.holidayName}</span>
                         )}
                       </h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => exportDayToPDF(day.day)}
-                        disabled={daySelections.length === 0}
-                      >
-                        <FileDown className="h-4 w-4 mr-2" />
-                        Exporter
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          {daySelections.length} sélection{daySelections.length > 1 ? "s" : ""}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => exportDayToPDF(day.day)}
+                          disabled={daySelections.length === 0}
+                        >
+                          <FileDown className="h-4 w-4 mr-2" />
+                          Exporter
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="space-y-3">
@@ -570,26 +599,33 @@ export default function PlanningClientPage() {
                         // Filtrer les sélections pour ce repas
                         const mealSelections = daySelections.filter((s) => s.mealId === meal.id)
 
-                        if (mealSelections.length === 0) return null
-
                         return (
                           <div key={meal.id} className="border rounded-md p-4">
-                            <h4 className="font-medium mb-2">{meal.name}</h4>
-
-                            <div className="space-y-1">
-                              {mealSelections.map((selection) => (
-                                <div key={selection.userId} className="text-sm pl-2 border-l-2 border-slate-200">
-                                  {selection.userName}
-                                </div>
-                              ))}
+                            <div className="flex justify-between items-center mb-2">
+                              <h4 className="font-medium">{meal.name}</h4>
+                              <span className="text-sm text-muted-foreground">
+                                {mealSelections.length} personne{mealSelections.length > 1 ? "s" : ""}
+                              </span>
                             </div>
+
+                            {mealSelections.length > 0 ? (
+                              <div className="space-y-1">
+                                {mealSelections.map((selection) => (
+                                  <div key={selection.userId} className="text-sm pl-2 border-l-2 border-slate-200">
+                                    {selection.userName}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground italic">Aucune sélection</div>
+                            )}
                           </div>
                         )
                       })}
 
-                      {!day.meals.some((meal) => daySelections.some((s) => s.mealId === meal.id)) && (
+                      {day.meals.length === 0 && (
                         <div className="text-center py-2 text-sm text-muted-foreground">
-                          Aucune sélection pour ce jour
+                          {day.isHoliday ? "Jour férié - Aucun repas prévu" : "Aucun repas configuré"}
                         </div>
                       )}
                     </div>
@@ -597,7 +633,7 @@ export default function PlanningClientPage() {
                 )
               })}
 
-              {userSelections.length === 0 && (
+              {userSelections.length === 0 && meals.length > 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   Aucune sélection n'a été faite pour cette semaine
                 </div>
@@ -694,5 +730,3 @@ export default function PlanningClientPage() {
     </div>
   )
 }
-
-

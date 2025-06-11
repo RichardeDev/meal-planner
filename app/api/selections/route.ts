@@ -1,6 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { readData, updateData, type UserSelection } from "@/lib/json-utils"
+// Fonction pour générer une clé de semaine unique (année-semaine)
+const getWeekKey = (weekOffset: number): string => {
+  const today = new Date()
+  const monday = new Date(today)
+  const dayOfWeek = today.getDay()
+  const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1)
 
+  monday.setDate(diff + weekOffset * 7)
+  monday.setHours(0, 0, 0, 0)
+
+  // Calculer le numéro de semaine dans l'année
+  const startOfYear = new Date(monday.getFullYear(), 0, 1)
+  const weekNumber = Math.ceil(((monday.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
+
+  return `${monday.getFullYear()}-W${weekNumber.toString().padStart(2, "0")}`
+}
 // GET /api/selections - Récupérer toutes les sélections
 export async function GET(request: NextRequest) {
   try {
@@ -25,10 +40,12 @@ export async function GET(request: NextRequest) {
     // Filtrer par semaine si spécifié
     if (weekOffset !== null) {
       const weekOffsetNum = Number.parseInt(weekOffset)
-      selections = selections.filter(
-        (selection) =>
-          selection.weekOffset === weekOffsetNum || (selection.weekOffset === undefined && weekOffsetNum === 0), // Pour la compatibilité avec les anciennes données
-      )
+      const targetWeekKey = getWeekKey(weekOffsetNum)
+        selections = selections.filter((selection) =>{
+          // Pour la compatibilité avec les anciennes données qui n'ont pas de weekKey
+          const selectionWeekKey = selection.weekKey || getWeekKey(selection.weekOffset || 0)
+          return selectionWeekKey === targetWeekKey
+      })
     }
 
     return NextResponse.json(selections)
@@ -67,23 +84,27 @@ async function selectMeal(
   weekOffset = 0,
 ): Promise<boolean> {
   try {
+    const weekKey = getWeekKey(weekOffset)
+    console.log(
+      `selectMeal - userId: ${userId}, dayId: ${dayId}, mealId: ${mealId}, weekOffset: ${weekOffset}, weekKey: ${weekKey}`,
+    )
     await updateData("userSelections", (selections) => {
       // Check if user already has a selection for this day and week
-      const existingSelectionIndex = selections.findIndex(
-        (selection) =>
-          selection.userId === userId &&
-          selection.dayId === dayId &&
-          (selection.weekOffset === weekOffset || (selection.weekOffset === undefined && weekOffset === 0)),
-      )
+      const existingSelectionIndex = selections.findIndex((selection) => {
+        const selectionWeekKey = selection.weekKey || getWeekKey(selection.weekOffset || 0)
+        return selection.userId === userId && selection.dayId === dayId && selectionWeekKey === weekKey
+      })
 
       if (existingSelectionIndex !== -1) {
         // Update existing selection
         selections[existingSelectionIndex].mealId = mealId
         // Ensure weekOffset is set
         selections[existingSelectionIndex].weekOffset = weekOffset
+        selections[existingSelectionIndex].weekKey = weekKey
       } else {
         // Add new selection
-        selections.push({ userId, userName, dayId, mealId, weekOffset })
+        const newSelection = { userId, userName, dayId, mealId, weekOffset, weekKey }
+        selections.push(newSelection)
       }
 
       return selections
@@ -100,11 +121,12 @@ async function selectMeal(
 async function getUserSelectionsForWeek(userId: string, weekOffset = 0): Promise<UserSelection[]> {
   try {
     const data = await readData()
-    return data.userSelections.filter(
-      (selection) =>
-        selection.userId === userId &&
-        (selection.weekOffset === weekOffset || (selection.weekOffset === undefined && weekOffset === 0)),
-    )
+    const targetWeekKey = getWeekKey(weekOffset)
+
+    return data.userSelections.filter((selection) => {
+      const selectionWeekKey = selection.weekKey || getWeekKey(selection.weekOffset || 0)
+      return selection.userId === userId && selectionWeekKey === targetWeekKey
+    })
   } catch (error) {
     console.error("Erreur lors de la récupération des sélections de l'utilisateur:", error)
     return []
@@ -115,11 +137,12 @@ async function getUserSelectionsForWeek(userId: string, weekOffset = 0): Promise
 async function getMealSelectionsForDayAndWeek(dayId: string, weekOffset = 0): Promise<UserSelection[]> {
   try {
     const data = await readData()
-    return data.userSelections.filter(
-      (selection) =>
-        selection.dayId === dayId &&
-        (selection.weekOffset === weekOffset || (selection.weekOffset === undefined && weekOffset === 0)),
-    )
+    const targetWeekKey = getWeekKey(weekOffset)
+
+    return data.userSelections.filter((selection) => {
+      const selectionWeekKey = selection.weekKey || getWeekKey(selection.weekOffset || 0)
+      return selection.dayId === dayId && selectionWeekKey === targetWeekKey
+    })
   } catch (error) {
     console.error("Erreur lors de la récupération des sélections pour le jour:", error)
     return []
@@ -130,9 +153,12 @@ async function getMealSelectionsForDayAndWeek(dayId: string, weekOffset = 0): Pr
 async function getAllSelectionsForWeek(weekOffset = 0): Promise<UserSelection[]> {
   try {
     const data = await readData()
-    return data.userSelections.filter(
-      (selection) => selection.weekOffset === weekOffset || (selection.weekOffset === undefined && weekOffset === 0),
-    )
+    const targetWeekKey = getWeekKey(weekOffset)
+
+    return data.userSelections.filter((selection) => {
+      const selectionWeekKey = selection.weekKey || getWeekKey(selection.weekOffset || 0)
+      return selectionWeekKey === targetWeekKey
+    })
   } catch (error) {
     console.error("Erreur lors de la récupération de toutes les sélections:", error)
     return []

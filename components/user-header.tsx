@@ -17,24 +17,12 @@ import type { User } from "@/lib/data"
 import NotificationIcon from "@/components/notification-icon"
 import AdminNav from "@/components/admin-nav"
 import { LogOut } from "lucide-react"
+import { useSession } from "./session-provider"
 
 export default function UserHeader() {
-  const pathname = usePathname()
   const router = useRouter()
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
-
-  // Utiliser useEffect pour accéder à localStorage uniquement côté client
-  useEffect(() => {
-    try {
-      const storedUser = localStorage.getItem("user")
-      if (storedUser) {
-        setUser(JSON.parse(storedUser))
-      }
-    } catch (error) {
-      console.error("Erreur lors de la récupération de l'utilisateur:", error)
-    }
-  }, [])
+  const {user, logout } = useSession()
 
   const handleLogoutClick = () => {
     setIsLogoutDialogOpen(true)
@@ -43,12 +31,7 @@ export default function UserHeader() {
   const handleLogout = () => {
     setIsLogoutDialogOpen(false)
 
-    // Supprimer l'utilisateur du localStorage
-    localStorage.removeItem("user")
-
-    // Supprimer les cookies d'authentification
-    document.cookie = "authToken=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT"
-    document.cookie = "userRole=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    logout()
 
     toast.success("Déconnexion réussie", {
       description: "À bientôt!",
