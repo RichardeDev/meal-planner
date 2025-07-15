@@ -98,6 +98,7 @@ export default function UserDashboardClientPage() {
 
     // Refresh selections
     const selections = await getUserSelections(userId, currentWeek)
+    console.log(`Sélections chargées pour l'utilisateur ${userId}, semaine ${currentWeek}:`, selections)
     setUserSelections(selections)
 
     toast.success("Repas sélectionné", {

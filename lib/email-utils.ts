@@ -7,6 +7,10 @@ type EmailOptions = {
   html: string
 }
 
+
+const fromName = process.env.MAIL_FROM_NAME || "Planificateur de repas"
+const fromAddress = process.env.MAIL_FROM_ADDRESS || "no-reply@example.com"
+
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || "smtp.ethereal.email",
   port: Number(process.env.EMAIL_PORT) || 587,
@@ -26,7 +30,7 @@ export async function sendEmail({ to, subject, text, html }: EmailOptions): Prom
     // }
 
     const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || '"Planificateur de Repas" <no-reply@example.com>',
+      from:  `"${fromName}" <${fromAddress}>` || '"Planificateur de Repas" <no-reply@example.com>',
       to,
       subject,
       text,

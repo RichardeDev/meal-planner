@@ -17,10 +17,12 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { Plus, Edit, Trash2 } from "lucide-react"
 import type { Meal } from "@/lib/json-utils"
+import { createMeal, deleteMeal, getAllMeals, updateMealDetails } from "@/lib/data"
 
 export default function MealsClientPage() {
   const [meals, setMeals] = useState<Meal[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingSup, setIsLoadingSup] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -32,9 +34,7 @@ export default function MealsClientPage() {
     const fetchMeals = async () => {
       setIsLoading(true)
       try {
-        const response = await fetch("/api/meals")
-        if (!response.ok) throw new Error("Erreur lors de la récupération des repas")
-        const data = await response.json()
+        const data = await getAllMeals()
         setMeals(data)
       } catch (error) {
         console.error("Erreur:", error)
@@ -50,21 +50,9 @@ export default function MealsClientPage() {
   }, [])
 
   const handleAddMeal = async () => {
+    setIsLoadingSup(true)
     try {
-      const response = await fetch("/api/meals", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newMeal),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Erreur lors de la création du repas")
-      }
-
-      const createdMeal = await response.json()
+      const createdMeal = await createMeal(newMeal.name, newMeal.description)
       setMeals([...meals, createdMeal])
       setIsAddDialogOpen(false)
       setNewMeal({ name: "", description: "" })
@@ -77,30 +65,27 @@ export default function MealsClientPage() {
       toast.error("Erreur", {
         description: error instanceof Error ? error.message : "Erreur lors de la création du repas",
       })
+    } finally {
+      setIsLoadingSup(false)
     }
   }
 
   const handleEditMeal = async () => {
     if (!editingMeal) return
+    setIsLoadingSup(true)
 
     try {
-      const response = await fetch(`/api/meals/${editingMeal.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: editingMeal.name,
-          description: editingMeal.description,
-        }),
-      })
+      const success = await updateMealDetails(
+        editingMeal.id,
+        editingMeal.name,
+        editingMeal.description
+      )
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Erreur lors de la modification du repas")
+      if (!success) {
+        throw new Error("Échec de la mise à jour du repas")
       }
 
-      setMeals(meals.map((meal) => (meal.id === editingMeal.id ? editingMeal : meal)))
+      setMeals(meals.map((m) => (m.id === editingMeal.id ? editingMeal : m)))
       setIsEditDialogOpen(false)
       setEditingMeal(null)
 
@@ -112,19 +97,19 @@ export default function MealsClientPage() {
       toast.error("Erreur", {
         description: error instanceof Error ? error.message : "Erreur lors de la modification du repas",
       })
+    } finally {
+      setIsLoadingSup(false)
     }
   }
 
   const handleDeleteMeal = async () => {
     if (!mealToDelete) return
+    setIsLoadingSup(true)
 
     try {
-      const response = await fetch(`/api/meals/${mealToDelete.id}`, {
-        method: "DELETE",
-      })
+      const success = await deleteMeal(mealToDelete.id)
 
-      if (response.status === 400) {
-        // Le repas est utilisé
+      if (!success) {
         toast.error("Suppression impossible", {
           description: "Ce repas est utilisé dans un ou plusieurs plannings et ne peut pas être supprimé",
         })
@@ -133,12 +118,7 @@ export default function MealsClientPage() {
         return
       }
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Erreur lors de la suppression du repas")
-      }
-
-      setMeals(meals.filter((meal) => meal.id !== mealToDelete.id))
+      setMeals(meals.filter((m) => m.id !== mealToDelete.id))
       setIsDeleteDialogOpen(false)
       setMealToDelete(null)
 
@@ -150,6 +130,8 @@ export default function MealsClientPage() {
       toast.error("Erreur", {
         description: error instanceof Error ? error.message : "Erreur lors de la suppression du repas",
       })
+    } finally {
+      setIsLoadingSup(false)
     }
   }
 
@@ -261,7 +243,7 @@ export default function MealsClientPage() {
               Annuler
             </Button>
             <Button onClick={handleAddMeal} disabled={!newMeal.name}>
-              Ajouter
+              { isLoadingSup ? "Ajout encours" : "Ajouter" }
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -299,7 +281,7 @@ export default function MealsClientPage() {
               Annuler
             </Button>
             <Button onClick={handleEditMeal} disabled={!editingMeal?.name}>
-              Enregistrer
+              {isLoadingSup ? "Enregistrement encours ...": "Enregistrer" }
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -328,8 +310,8 @@ export default function MealsClientPage() {
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
               Annuler
             </Button>
-            <Button variant="destructive" onClick={handleDeleteMeal}>
-              Supprimer
+            <Button variant="destructive" onClick={handleDeleteMeal} disabled={isLoadingSup}>
+              {isLoadingSup ? "Suppression en cours..." : "Supprimer"}
             </Button>
           </DialogFooter>
         </DialogContent>

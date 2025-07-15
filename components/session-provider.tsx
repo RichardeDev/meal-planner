@@ -16,16 +16,18 @@ const SessionContext = createContext<SessionContextType | undefined>(undefined)
 // Fonction utilitaire pour créer les cookies d'authentification
 const setAuthCookies = (user: any) => {
   const authToken = btoa(user.email + ":" + user.password)
-  const maxAge = 60 * 60 // 1 heure en secondes (synchronisé avec le timeout de session)
+  const maxAge = 60 * 60 
 
   document.cookie = `authToken=${authToken};path=/;max-age=${maxAge};SameSite=Strict`
   document.cookie = `userRole=${user.role};path=/;max-age=${maxAge};SameSite=Strict`
+  document.cookie = `userEmail=${user.email};path=/;max-age=${maxAge};SameSite=Strict`
 }
 
 // Fonction utilitaire pour supprimer les cookies d'authentification
 const clearAuthCookies = () => {
   document.cookie = "authToken=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT"
   document.cookie = "userRole=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT"
+  document.cookie = `userEmail=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT`
 }
 
 // Fonction utilitaire pour vérifier la cohérence entre localStorage et cookies
@@ -34,8 +36,9 @@ const validateAuthState = () => {
     const storedUser = localStorage.getItem("user")
     const authToken = document.cookie.split(";").find((row) => row.trim().startsWith("authToken="))
     const userRole = document.cookie.split(";").find((row) => row.trim().startsWith("userRole="))
+    const userEmail = document.cookie.split(";").find((row) => row.trim().startsWith("userEmail="))
 
-    if (storedUser && authToken && userRole) {
+    if (storedUser && authToken && userRole && userEmail) {
       const user = JSON.parse(storedUser)
       const expectedRole = userRole.split("=")[1]
 

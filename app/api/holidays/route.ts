@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     // Mettre à jour les repas de la semaine pour marquer ce jour comme férié
     await updateWeeklyMealsForHoliday(newHoliday)
 
-    return NextResponse.json(newHoliday, { status: 201 })
+    return NextResponse.json({holiday: newHoliday}, { status: 201 })
   } catch (error) {
     console.error("Erreur lors de la création du jour férié:", error)
     return NextResponse.json({ message: "Erreur lors de la création du jour férié" }, { status: 500 })

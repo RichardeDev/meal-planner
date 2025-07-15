@@ -6,20 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Calendar, Users, Coffee } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
+import { getPendingUsers } from "@/lib/data"
 
 export default function AdminNav() {
   const pathname = usePathname()
   const [pendingUsersCount, setPendingUsersCount] = useState(0)
 
   useEffect(() => {
-    // Récupérer le nombre d'utilisateurs en attente
     const fetchPendingUsers = async () => {
       try {
-        const response = await fetch("/api/users/pending")
-        if (response.ok) {
-          const data = await response.json()
-          setPendingUsersCount(data.length)
-        }
+        const data = await getPendingUsers()
+        setPendingUsersCount(data.length)
       } catch (error) {
         console.error("Erreur lors de la récupération des utilisateurs en attente:", error)
       }
@@ -27,7 +24,6 @@ export default function AdminNav() {
 
     fetchPendingUsers()
 
-    // Mettre à jour toutes les 30 secondes
     const interval = setInterval(fetchPendingUsers, 30000)
 
     return () => clearInterval(interval)

@@ -4,248 +4,248 @@ import type {
   DayMeals,
   UserSelection,
   PendingUser,
+  Holiday,
 } from "@/lib/json-utils";
+import { callApi } from "./utils";
 
 // Fonctions d'API pour les utilisateurs
+
+
+export async function getUserLogin(email: string): Promise<User | undefined> {
+  try {
+    const encodedEmail = encodeURIComponent(email)
+    const data = await callApi<Promise<User>>(`/api/auth/login/${encodedEmail}`)
+    return data
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'utilisateur par email:", error)
+    return undefined
+  }
+}
 export async function getUserByEmail(email: string): Promise<User | undefined> {
   try {
-    // Encoder l'email pour éviter les problèmes avec les caractères spéciaux comme @
-    const encodedEmail = encodeURIComponent(email);
-    const response = await fetch(`/api/users/${encodedEmail}`);
-    if (!response.ok) return undefined;
-    return await response.json();
+    const encodedEmail = encodeURIComponent(email)
+    const data = await callApi<Promise<User>>(`/api/users/${encodedEmail}`)
+    return data
   } catch (error) {
-    console.error(
-      "Erreur lors de la récupération de l'utilisateur par email:",
-      error
-    );
-    return undefined;
+    console.error("Erreur lors de la récupération de l'utilisateur par email:", error)
+    return undefined
   }
 }
 
 export async function getPendingUsers(): Promise<PendingUser[]> {
   try {
-    const response = await fetch("/api/users/pending");
-    if (!response.ok) return [];
-    return await response.json();
+    const data = await callApi<PendingUser[]>(`/api/users/pending`)
+    return data
   } catch (error) {
-    console.error(
-      "Erreur lors de la récupération des utilisateurs en attente:",
-      error
-    );
-    return [];
+    console.error("Erreur lors de la récupération des utilisateurs en attente:", error)
+    return []
   }
 }
 
 export async function getAllUsers(): Promise<User[]> {
   try {
-    const response = await fetch("/api/users");
-    if (!response.ok) return [];
-    return await response.json();
+    const data = await callApi<User[]>(`/api/users`)
+    return data
   } catch (error) {
-    console.error(
-      "Erreur lors de la récupération de tous les utilisateurs:",
-      error
-    );
-    return [];
+    console.error("Erreur lors de la récupération de tous les utilisateurs:", error)
+    return []
   }
 }
 
-export async function addNewUser(
-  name: string,
-  email: string,
-  password: string,
-  role: string
-): Promise<User> {
+export async function addNewUser(name: string, email: string, password: string, role: string): Promise<User> {
   try {
-    const response = await fetch("/api/users", {
+    const response = await callApi<{ user: User }>("/api/users", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name, email, password, role }),
-    });
-    if (!response.ok) {
-      throw new Error("Erreur lors de la création de l'utilisateur");
+      body: JSON.stringify({name, email, password, role}),
+    })
+
+    if (!response.user) {
+      throw new Error("Aucun utilisateur retourné")
     }
-    return await response.json();
+    
+    return response.user
   } catch (error) {
-    console.error("Erreur lors de la création de l'utilisateur:", error);
-    throw error;
+    console.error("Erreur lors de l'ajout d'un nouvel utilisateur:", error)
+    throw error
   }
 }
 
-export async function updateUser(user: User): Promise<User> {
+export async function updateUser(userData: User): Promise<User> {
   try {
-    const response = await fetch(`/api/users/${user.id}`, {
+    const response = await callApi<User>(`/api/users/${userData.id}`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(user),
-    });
-    if (!response.ok) {
-      throw new Error("Erreur lors de la mise à jour de l'utilisateur");
-    }
-    return await response.json();
+      body: JSON.stringify(userData),
+    })
+    return response
   } catch (error) {
-    console.error("Erreur lors de la mise à jour de l'utilisateur:", error);
-    throw error;
+    console.error("Erreur lors de la mise à jour de l'utilisateur:", error)
+    throw error
   }
 }
 
 export async function deleteUser(userId: string): Promise<void> {
   try {
-    const response = await fetch(`/api/users/${userId}`, {
+    const response = await callApi<{ success: boolean }>(`/api/users/${userId}`, {
       method: "DELETE",
-    });
-    if (!response.ok) {
-      throw new Error("Erreur lors de la suppression de l'utilisateur");
+    })
+    if (!response.success) {
+      throw new Error("Échec de la suppression de l'utilisateur")
     }
   } catch (error) {
-    console.error("Erreur lors de la suppression de l'utilisateur:", error);
-    throw error;
+    console.error("Erreur lors de la suppression de l'utilisateur:", error)
+    throw error
   }
 }
-export async function validateUser(
-  pendingUserId: string,
-  action: "approve" | "reject"
-): Promise<void> {
-  try {
-    const response = await fetch(`/api/auth/validate-user`, {
+
+
+export async function validateUser(pendingUserId: string, action: "approve" | "reject"): Promise<void> {
+  try{
+    const response = await callApi<{ success: boolean }>("/api/auth/validate-user", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({ pendingUserId, action }),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(
-        `Erreur lors de la ${action === "approve" ? "validation" : "rejet"} de l'utilisateur`
-      );
+    })
+
+    if (!response.success) {
+      throw new Error("Échec de la validation de l'utilisateur")
     }
   } catch (error) {
-    console.error(
-      `Erreur lors de la ${action === "approve" ? "validation" : "rejet"} de l'utilisateur:`,
-      error
-    );
-    throw error;
+    console.error("Erreur lors de la validation de l'utilisateur:", error)
+    throw error
+  }
+}
+
+// Fonctions d'API pour holidays
+export async function getHolidays(): Promise<Holiday[]> {
+  try {
+    const data = await callApi<Holiday[]>(`/api/holidays`)
+    return data
+  } catch (error) {
+    console.error("Erreur lors de la récupération de tous les jours fériés:", error)
+    return []
+  }
+}
+
+export async function postHoliday(name: string, date: string, recurring: boolean): Promise<Holiday> {
+  try{
+    const response = await callApi<{ holiday: Holiday }>("/api/holidays", {
+      method: "POST",
+      body: JSON.stringify({name, date, recurring}),
+    })
+    
+    return response.holiday
+  } catch (error) {
+    console.error("Erreur lors de l'ajout du jour férié':", error)
+    throw error
+  }
+}
+
+
+export async function deleteHoliday(holidayId: string): Promise<void> {
+  try {
+    const data = await callApi<{ success: boolean }>(`/api/holidays/${holidayId}`, {
+      method: "DELETE",
+    })
+
+    if (!data.success) {
+      throw new Error("Échec de la suppression du jour férié")
+    }
+  } catch (error) {
+    console.error("Erreur lors de la suppression du jour férié:", error)
+    throw error
   }
 }
 
 // Fonctions d'API pour les repas
-export async function createMeal(
-  name: string,
-  description: string
-): Promise<Meal> {
-  const response = await fetch("/api/meals", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name, description }),
-  });
 
-  if (!response.ok) {
-    throw new Error("Erreur lors de la création du repas");
+export async function getAllMeals(): Promise<Meal[]> {
+  try {
+    const meals = await callApi<Meal[]>("/api/meals")
+    return meals
+  } catch (error) {
+    console.error("Erreur lors de la récupération des repas:", error)
+    return []
   }
-
-  return await response.json();
 }
 
-export async function updateMealDetails(
-  mealId: string,
-  name: string,
-  description: string
-): Promise<boolean> {
-  const response = await fetch(`/api/meals/${mealId}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name, description }),
-  });
-
-  if (!response.ok) {
-    return false;
+export async function createMeal(name: string, description: string): Promise<Meal> {
+  try{ 
+    const response = await callApi<Meal>("/api/meals", {
+      method: "POST",
+      body: JSON.stringify({ name, description }),
+    })
+    return response
+  } catch (error) {
+    console.error("Erreur lors de la création du repas:", error)
+    throw error
   }
+}
 
-  const data = await response.json();
-  return data.success;
+export async function updateMealDetails(mealId: string, name: string, description: string): Promise<boolean> {
+  try{
+    const response = await callApi<{ success: boolean }>(`/api/meals/${mealId}`, {
+      method: "PUT",
+      body: JSON.stringify({ name, description }),
+    })
+    return response.success
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du repas:", error)
+    return false
+  }
 }
 
 export async function deleteMeal(mealId: string): Promise<boolean> {
-  const response = await fetch(`/api/meals/${mealId}`, {
-    method: "DELETE",
-  });
-
-  if (response.status === 400) {
-    // Le repas est utilisé
-    return true;
+  try{
+    const response = await callApi<{ success: boolean }>(`/api/meals/${mealId}`, {
+      method: "DELETE",
+    })
+    return response.success
+  } catch (error) {
+    console.error("Erreur lors de la suppression du repas:", error)
+    return false
   }
-
-  if (!response.ok) {
-    throw new Error("Erreur lors de la suppression du repas");
-  }
-
-  return false;
 }
 
 // Fonctions d'API pour les repas hebdomadaires
-export async function getWeeklyMealsForWeek(
-  weekOffset = 0
-): Promise<DayMeals[]> {
-  const response = await fetch(`/api/weekly-meals?weekOffset=${weekOffset}`);
-
-  if (!response.ok) {
-    throw new Error("Erreur lors de la récupération des repas de la semaine");
+export async function getWeeklyMealsForWeek(weekOffset = 0): Promise<DayMeals[]> {
+  try {
+    const data = await callApi<DayMeals[]>(
+      `/api/weekly-meals?weekOffset=${weekOffset}`
+    )
+    return data
+  } catch (error) {
+    console.error("Erreur lors de la récupération des repas hebdomadaires:", error)
+    return []
   }
-
-  return await response.json();
 }
-
 export async function updateMeal(
   dayId: string,
   oldMealId: string,
   newMealId: string,
   weekOffset = 0
 ): Promise<boolean> {
-  const response = await fetch("/api/weekly-meals", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ dayId, oldMealId, newMealId, weekOffset }),
-  });
-
-  if (!response.ok) {
-    return false;
+  try {
+    const response = await callApi<{ success: boolean }>("/api/weekly-meals", {
+      method: "PUT",
+      body: JSON.stringify({ dayId, oldMealId, newMealId, weekOffset }),
+    })
+    return response.success
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du repas:", error)
+    return false
   }
-
-  const data = await response.json();
-  return data.success;
 }
 
-export async function addMeal(
-  dayId: string,
-  mealId: string,
-  weekOffset = 0
-): Promise<boolean> {
-  const response = await fetch("/api/weekly-meals", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ dayId, mealId, weekOffset }),
-  });
-
-  if (!response.ok) {
-    return false;
+export async function addMeal(dayId: string, mealId: string, weekOffset = 0): Promise<boolean> {
+  try {
+    const response = await callApi<{ success: boolean }>("/api/weekly-meals", {
+      method: "POST",
+      body: JSON.stringify({ dayId, mealId, weekOffset }),
+    })
+    return response.success
+  } catch (error) {
+    console.error("Erreur lors de l'ajout du repas:", error)
+    return false
   }
-
-  const data = await response.json();
-  return data.success;
 }
 
 export async function removeMeal(
@@ -253,21 +253,80 @@ export async function removeMeal(
   mealId: string,
   weekOffset = 0
 ): Promise<boolean> {
-  const response = await fetch("/api/weekly-meals", {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ dayId, mealId, weekOffset }),
-  });
-
-  if (!response.ok) {
-    return false;
+  try {
+    const response = await callApi<{ success: boolean }>("/api/weekly-meals", {
+      method: "DELETE",
+      body: JSON.stringify({ dayId, mealId, weekOffset }),
+    })
+    return response.success
+  } catch (error) {
+    console.error("Erreur lors de la suppression du repas:", error)
+    return false
   }
-
-  const data = await response.json();
-  return data.success;
 }
+
+
+// Mettre à jour les fonctions d'API pour les sélections
+export async function selectMeal(
+  userId: string,
+  userName: string,
+  dayId: string,
+  mealId: string,
+  weekOffset = 0
+): Promise<boolean> {
+  try{
+    const response = await callApi<{ success: boolean }>("/api/selections", {
+      method: "POST",
+      body: JSON.stringify({ userId, userName, dayId, mealId, weekOffset }),
+    })
+    return response.success
+  } catch (error) {
+    console.error("Erreur lors de la sélection du repas:", error)
+    return false
+  }
+}
+
+export async function getUserSelections(
+  userId: string,
+  weekOffset = 0
+): Promise<UserSelection[]> {
+  try {
+    const url = `/api/selections?userId=${userId}&weekOffset=${weekOffset}`
+    const data = await callApi<UserSelection[]>(url)
+    return data
+  } catch (error) {
+    console.error("Erreur lors de la récupération des sélections utilisateur:", error)
+    return []
+  }
+}
+
+export async function getMealSelectionsForDay(
+  dayId: string,
+  weekOffset = 0
+): Promise<UserSelection[]> {
+  try {
+    const url = `/api/selections?dayId=${dayId}&weekOffset=${weekOffset}`
+    const data = await callApi<{ selections: UserSelection[] }>(url)
+    return data.selections || []
+  } catch (error) {
+    console.error("Erreur lors de la récupération des sélections par jour:", error)
+    return []
+  }
+}
+
+export async function getAllSelections(
+  weekOffset = 0
+): Promise<UserSelection[]> {
+  try {
+    const url = `/api/selections?weekOffset=${weekOffset}`
+    const data = await callApi<UserSelection[]>(url)
+    return data
+  } catch (error) {
+    console.error("Erreur lors de la récupération de toutes les sélections:", error)
+    return []
+  }
+}
+
 
 // Fonction pour générer une clé de semaine unique (année-semaine)
 export function getWeekKey(weekOffset: number): string {
@@ -287,72 +346,6 @@ export function getWeekKey(weekOffset: number): string {
       7
   );
   return `${monday.getFullYear()}-W${weekNumber.toString().padStart(2, "0")}`;
-}
-
-// Mettre à jour les fonctions d'API pour les sélections
-export async function selectMeal(
-  userId: string,
-  userName: string,
-  dayId: string,
-  mealId: string,
-  weekOffset = 0
-): Promise<boolean> {
-  const response = await fetch("/api/selections", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ userId, userName, dayId, mealId, weekOffset }),
-  });
-
-  if (!response.ok) {
-    return false;
-  }
-
-  const data = await response.json();
-  return data.success;
-}
-
-export async function getUserSelections(
-  userId: string,
-  weekOffset = 0
-): Promise<UserSelection[]> {
-  const response = await fetch(
-    `/api/selections?userId=${userId}&weekOffset=${weekOffset}`
-  );
-
-  if (!response.ok) {
-    return [];
-  }
-
-  return await response.json();
-}
-
-export async function getMealSelectionsForDay(
-  dayId: string,
-  weekOffset = 0
-): Promise<UserSelection[]> {
-  const response = await fetch(
-    `/api/selections?dayId=${dayId}&weekOffset=${weekOffset}`
-  );
-
-  if (!response.ok) {
-    return [];
-  }
-
-  return await response.json();
-}
-
-export async function getAllSelections(
-  weekOffset = 0
-): Promise<UserSelection[]> {
-  const response = await fetch(`/api/selections?weekOffset=${weekOffset}`);
-
-  if (!response.ok) {
-    return [];
-  }
-
-  return await response.json();
 }
 
 // Modifier la fonction pour ne vérifier que jeudi et vendredi
@@ -664,47 +657,3 @@ export function getDayAvailabilityMessage(
 // Exporter les types pour la compatibilité
 export type { User, Meal, DayMeals, UserSelection };
 
-export const meals = [
-  {
-    id: "1",
-    name: "Poulet rôti",
-    description: "Poulet rôti avec pommes de terre",
-  },
-  {
-    id: "2",
-    name: "Spaghetti Bolognaise",
-    description: "Pâtes avec sauce tomate et viande hachée",
-  },
-  {
-    id: "3",
-    name: "Salade César",
-    description: "Salade avec poulet, croûtons et parmesan",
-  },
-  { id: "4", name: "Steak-frites", description: "Steak avec frites et salade" },
-  {
-    id: "5",
-    name: "Poisson pané",
-    description: "Poisson pané avec riz et légumes",
-  },
-  {
-    id: "6",
-    name: "Lasagnes",
-    description: "Lasagnes à la viande et béchamel",
-  },
-  {
-    id: "7",
-    name: "Quiche Lorraine",
-    description: "Quiche aux lardons et fromage",
-  },
-  { id: "8", name: "Couscous", description: "Couscous avec légumes et viande" },
-  {
-    id: "9",
-    name: "Pizza Margherita",
-    description: "Pizza avec tomate et mozzarella",
-  },
-  {
-    id: "10",
-    name: "Ratatouille",
-    description: "Légumes mijotés à la provençale",
-  },
-];

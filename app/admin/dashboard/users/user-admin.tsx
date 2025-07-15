@@ -25,6 +25,7 @@ export default function UsersAdminClientPage() {
   const [users, setUsers] = useState<User[]>([])
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingUser, setIsLoadingUser] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -38,10 +39,6 @@ export default function UsersAdminClientPage() {
       try {
         const usersData = await getAllUsers()
         setUsers(usersData)
-
-        // Récupérer les utilisateurs en attente
-        const pendingUsersData = await getPendingUsers()
-        setPendingUsers(pendingUsersData)
       } catch (error) {
         console.error("Erreur:", error)
         toast.error("Erreur", {
@@ -51,13 +48,28 @@ export default function UsersAdminClientPage() {
         setIsLoading(false)
       }
     }
+    const fetchPendingUsers = async () => {
+      try {
+        const pendingUsersData = await getPendingUsers()
+        setPendingUsers(pendingUsersData)
+      } catch (error) {
+        console.error("Erreur:", error)
+        throw error
+      } 
+    }
 
     fetchUsers()
+    fetchPendingUsers()
+
+    const interval = setInterval(fetchPendingUsers, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleCreateUser = async () => {
+    setIsLoadingUser(true)
     try {
       const createdUser = await addNewUser(newUser.name, newUser.email, newUser.password, newUser.role)
+      console.log(createdUser)
       setUsers([...users, createdUser])
       setIsCreateDialogOpen(false)
       setNewUser({ name: "", email: "", password: "", role: "user" })
@@ -70,11 +82,14 @@ export default function UsersAdminClientPage() {
       toast.error("Erreur", {
         description: error instanceof Error ? error.message : "Erreur lors de la création de l'utilisateur",
       })
+    } finally {
+      setIsLoadingUser(false)
     }
   }
 
   const handleEditUser = async () => {
     if (!editingUser) return
+    setIsLoadingUser(true)
 
     try {
       await updateUser(editingUser)
@@ -91,11 +106,14 @@ export default function UsersAdminClientPage() {
       toast.error("Erreur", {
         description: error instanceof Error ? error.message : "Erreur lors de la modification de l'utilisateur",
       })
+    } finally {
+      setIsLoadingUser(false)
     }
   }
 
   const handleDeleteUser = async () => {
     if (!userToDelete) return
+    setIsLoadingUser(true)
 
     try {
       await deleteUser(userToDelete.id)
@@ -112,10 +130,13 @@ export default function UsersAdminClientPage() {
       toast.error("Erreur", {
         description: error instanceof Error ? error.message : "Erreur lors de la suppression de l'utilisateur",
       })
+    } finally {
+      setIsLoadingUser(false)
     }
   }
 
   const handleValidateUser = async (pendingUserId: string, action: "approve" | "reject") => {
+    setIsLoadingUser(true)
     try {
       await validateUser(pendingUserId, action)
 
@@ -124,9 +145,8 @@ export default function UsersAdminClientPage() {
 
       // Si l'utilisateur a été approuvé, récupérer la liste mise à jour des utilisateurs
       if (action === "approve") {
-        const usersResponse = await fetch("/api/users")
-        if (usersResponse.ok) {
-          const usersData = await usersResponse.json()
+        const usersData = await getAllUsers()
+        if (usersData.length > 0) {
           setUsers(usersData)
         }
       }
@@ -145,6 +165,8 @@ export default function UsersAdminClientPage() {
             ? error.message
             : `Erreur lors de la ${action === "approve" ? "validation" : "rejet"} de l'utilisateur`,
       })
+    } finally {
+      setIsLoadingUser(false)
     }
   }
 
@@ -204,11 +226,11 @@ export default function UsersAdminClientPage() {
                     </TableRow>
                   ) : (
                     users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell>{user.email}</TableCell>
+                      <TableRow key={user?.id}>
+                        <TableCell className="font-medium">{user?.name}</TableCell>
+                        <TableCell>{user?.email}</TableCell>
                         <TableCell>
-                          {user.role === "admin" ? (
+                          {user?.role === "admin" ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
                               Administrateur
                             </span>
@@ -237,7 +259,7 @@ export default function UsersAdminClientPage() {
                                 setUserToDelete(user)
                                 setIsDeleteDialogOpen(true)
                               }}
-                              disabled={user.role === "admin" && users.filter((u) => u.role === "admin").length <= 1}
+                              disabled={user?.role === "admin" && users.filter((u) => u?.role === "admin").length <= 1}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -298,7 +320,7 @@ export default function UsersAdminClientPage() {
                               onClick={() => handleValidateUser(user.id, "approve")}
                             >
                               <CheckCircle className="h-4 w-4 mr-2" />
-                              Valider
+                              { isLoadingUser ? "Validation ..." : "Valider" }
                             </Button>
                             <Button
                               variant="outline"
@@ -307,7 +329,7 @@ export default function UsersAdminClientPage() {
                               onClick={() => handleValidateUser(user.id, "reject")}
                             >
                               <XCircle className="h-4 w-4 mr-2" />
-                              Rejeter
+                              { isLoadingUser ? "Rejeter ..." : "Rejeter" }
                             </Button>
                           </div>
                         </TableCell>
@@ -378,7 +400,7 @@ export default function UsersAdminClientPage() {
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
               Annuler
             </Button>
-            <Button onClick={handleCreateUser}>Créer</Button>
+            <Button onClick={handleCreateUser} disabled={isLoadingUser}>{ isLoadingUser ? "Creation en cours..." : "Créer" }</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -436,7 +458,7 @@ export default function UsersAdminClientPage() {
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Annuler
             </Button>
-            <Button onClick={handleEditUser}>Enregistrer</Button>
+            <Button onClick={handleEditUser} disabled={isLoadingUser}>{ isLoadingUser ? "Enregistrement en cours..." : "Enregistrer" }</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -462,8 +484,8 @@ export default function UsersAdminClientPage() {
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
               Annuler
             </Button>
-            <Button variant="destructive" onClick={handleDeleteUser}>
-              Supprimer
+            <Button variant="destructive" onClick={handleDeleteUser} disabled={isLoadingUser}>
+              { isLoadingUser ? "Supprimession en cours ..." : "Supprimer" }
             </Button>
           </DialogFooter>
         </DialogContent>

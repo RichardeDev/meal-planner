@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         id: newId,
         name: pendingUser.name,
         email: pendingUser.email,
-        password: pendingUser.password, // Note: Dans une application réelle, le mot de passe devrait être hashé
+        password: pendingUser.password, 
         role: "user",
       }
 
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     // Supprimer l'utilisateur de la liste des utilisateurs en attente
     await updateData("pendingUsers", (pendingUsers) => pendingUsers?.filter((user) => user.id !== pendingUserId))
 
-    return NextResponse.json({
+    return NextResponse.json({success:true ,
       message: action === "approve" ? "Utilisateur validé avec succès" : "Utilisateur rejeté avec succès",
     })
   } catch (error) {

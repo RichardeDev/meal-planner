@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { readData, updateData, type User } from "@/lib/json-utils"
+import bcrypt from "bcryptjs"
 
 // GET /api/users - Récupérer tous les utilisateurs
 export async function GET(request: NextRequest) {
@@ -14,11 +15,20 @@ export async function GET(request: NextRequest) {
 // POST /api/users - Créer un nouvel utilisateur
 export async function POST(request: NextRequest) {
   try {
-    const newUser = (await request.json()) as User
+    const {name, email, password, role} = await request.json()
 
     // Validation de base
-    if (!newUser.name || !newUser.email || !newUser.role) {
+    if (!name || !email || !role) {
       return NextResponse.json({ error: "Données utilisateur incomplètes" }, { status: 400 })
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+    const newUser: User = {
+      id: "",
+      name: name,
+      email: email,
+      password: hashedPassword,
+      role: role
     }
 
     await updateData("users", (users) => {
@@ -29,7 +39,7 @@ export async function POST(request: NextRequest) {
       return [...users, newUser]
     })
 
-    return NextResponse.json(newUser, { status: 201 })
+    return NextResponse.json({user: newUser}, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: "Erreur lors de la création de l'utilisateur" }, { status: 500 })
   }

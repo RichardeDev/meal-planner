@@ -10,16 +10,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { getUserByEmail } from "@/lib/data"
+import { getUserLogin } from "@/lib/data"
 import Link from "next/link";
 import { useSession } from "@/components/session-provider";
+import { id } from "date-fns/locale";
+import bcrypt from "bcryptjs";
 
 
 export default function LoginClientPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
   const { login } = useSession()
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -27,15 +29,13 @@ export default function LoginClientPage() {
     setIsLoading(true)
 
     try {
-      const user = await getUserByEmail(email)
-
-      if (user && user.password === password) {
+      const user = await getUserLogin(email)
+      if (user && user.password && bcrypt.compareSync(password, user.password)) {
         login({
           id: user.id,
           name: user.name,
           email: user.email,
           role: user.role,
-          password: user.password, 
         })
 
         toast.success("Connexion réussie", {
@@ -98,8 +98,8 @@ export default function LoginClientPage() {
                     required
                   />
                 </div>
-                <Button type="submit" className="w-full">
-                  Se connecter
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Connexion en cours..." : "Se connecter"}
                 </Button>
               </form>
             </TabsContent>

@@ -29,6 +29,7 @@ import {
   isHoliday as checkIsHoliday,
   getHolidayName as getHolidayNameUtil,
 } from "@/lib/holiday-utils"
+import { deleteHoliday, getHolidays, postHoliday } from "@/lib/data"
 
 export default function HolidaysClientPage() {
   const [holidays, setHolidays] = useState<Holiday[]>([])
@@ -61,30 +62,19 @@ export default function HolidaysClientPage() {
     const fetchHolidays = async () => {
       setIsLoading(true)
       try {
-        const response = await fetch("/api/holidays")
-        if (!response.ok) throw new Error("Erreur lors de la récupération des jours fériés")
-        let data = await response.json()
+        let data = await getHolidays()
 
-        // Si aucun jour férié n'est configuré, ajouter les jours fériés français par défaut
         if (data.length === 0) {
-          // Convertir les jours fériés calculés au format API
           const defaultHolidays = convertHolidaysToApiFormat(calculatedHolidays)
 
-          // Ajouter les jours fériés français par défaut
           for (const holiday of defaultHolidays) {
-            await fetch("/api/holidays", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(holiday),
-            })
+            await postHoliday(holiday.name, holiday.date, holiday.recurring)
           }
 
           // Récupérer à nouveau les jours fériés
-          const newResponse = await fetch("/api/holidays")
-          if (newResponse.ok) {
-            data = await newResponse.json()
+          data = await getHolidays()
+          if (data.length === 0) {
+            return data = []
           }
         }
 
@@ -115,24 +105,12 @@ export default function HolidaysClientPage() {
     }
 
     try {
-      const response = await fetch("/api/holidays", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: newHoliday.name,
-          date: format(newHoliday.date, "yyyy-MM-dd"),
-          recurring: newHoliday.recurring,
-        }),
-      })
+      const createdHoliday = await postHoliday(
+        newHoliday.name,
+        format(newHoliday.date, "yyyy-MM-dd"),
+        newHoliday.recurring
+      )
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Erreur lors de l'ajout du jour férié")
-      }
-
-      const createdHoliday = await response.json()
       const updatedHolidays = [...holidays, createdHoliday]
       setHolidays(updatedHolidays)
       setHolidayDates([...holidayDates, new Date(createdHoliday.date)])
@@ -147,42 +125,39 @@ export default function HolidaysClientPage() {
         description: "Le jour férié a été ajouté avec succès",
       })
     } catch (error) {
-      console.error("Erreur:", error)
+      console.error("Erreur lors de l'ajout du jour férié:", error)
       toast.error("Erreur", {
-        description: error instanceof Error ? error.message : "Erreur lors de l'ajout du jour férié",
+        description:
+          error instanceof Error ? error.message : "Erreur lors de l'ajout du jour férié",
       })
     }
   }
 
-  const handleDeleteHoliday = async (): Promise<void> => {
-    if (!holidayToDelete) return
+  
+const handleDeleteHoliday = async (): Promise<void> => {
+  if (!holidayToDelete) return
 
-    try {
-      const response = await fetch(`/api/holidays/${holidayToDelete.id}`, {
-        method: "DELETE",
-      })
+  try {
+    // Appel via `callApi()` via votre librairie
+    await deleteHoliday(holidayToDelete.id)
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Erreur lors de la suppression du jour férié")
-      }
+    const updatedHolidays = holidays.filter((h) => h.id !== holidayToDelete.id)
+    setHolidays(updatedHolidays)
+    setHolidayDates(updatedHolidays.map((h) => new Date(h.date)))
 
-      const updatedHolidays = holidays.filter((holiday) => holiday.id !== holidayToDelete.id)
-      setHolidays(updatedHolidays)
-      setHolidayDates(updatedHolidays.map((holiday) => new Date(holiday.date)))
-      setIsDeleteDialogOpen(false)
-      setHolidayToDelete(null)
+    setIsDeleteDialogOpen(false)
+    setHolidayToDelete(null)
 
-      toast.success("Jour férié supprimé", {
-        description: "Le jour férié a été supprimé avec succès",
-      })
-    } catch (error) {
-      console.error("Erreur:", error)
-      toast.error("Erreur", {
-        description: error instanceof Error ? error.message : "Erreur lors de la suppression du jour férié",
-      })
-    }
+    toast.success("Jour férié supprimé", {
+      description: "Le jour férié a été supprimé avec succès",
+    })
+  } catch (error) {
+    console.error("Erreur lors de la suppression du jour férié:", error)
+    toast.error("Erreur", {
+      description: error instanceof Error ? error.message : "Impossible de supprimer ce jour férié",
+    })
   }
+}
 
   // Fonction pour vérifier si une date est un jour férié
   const isHoliday = (date: Date) => {

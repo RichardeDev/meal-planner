@@ -25,6 +25,8 @@ import {
   getWeeklyMealsForWeek,
   isDayEditable,
   getDayAvailabilityMessage,
+  getAllMeals,
+  getAllSelections,
 } from "@/lib/data"
 import { toast } from "sonner"
 import jsPDF from "jspdf"
@@ -37,13 +39,17 @@ export default function PlanningClientPage() {
   const [currentWeek, setCurrentWeek] = useState<number>(0) // 0 = semaine actuelle
   const [meals, setMeals] = useState<DayMeals[]>([])
   const [mealsList, setMealsList] = useState<Meal[]>([])
+  const [mealToDelete, setMealToDelete] = useState<Meal | null>(null)
+  const [dayToDelete, setDayToDelete] = useState<DayMeals | null>(null)
   const [selectedDay, setSelectedDay] = useState<string>("")
   const [selectedMeal, setSelectedMeal] = useState<string>("")
   const [userSelections, setUserSelections] = useState<UserSelection[]>([])
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingMeal, setEditingMeal] = useState<{ dayId: string; mealId: string } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMeal, setIsLoadingMeal] = useState(false)
 
   // Fonction pour obtenir la clé de semaine (année-semaine)
   const getWeekKey = (weekOffset: number): string => {
@@ -80,15 +86,11 @@ export default function PlanningClientPage() {
         }
 
         // Charger la liste des repas disponibles
-        const mealsResponse = await fetch("/api/meals")
-        if (!mealsResponse.ok) throw new Error("Erreur lors du chargement des repas")
-        const mealsData = await mealsResponse.json()
+        const mealsData = await getAllMeals()
         setMealsList(mealsData)
 
         // Charger les sélections des utilisateurs pour cette semaine spécifique
-        const selectionsResponse = await fetch(`/api/selections?weekOffset=${currentWeek}`)
-        if (!selectionsResponse.ok) throw new Error("Erreur lors du chargement des sélections")
-        const selectionsData = await selectionsResponse.json()
+        const selectionsData = await getAllSelections(currentWeek)
         setUserSelections(selectionsData)
         console.log(`Sélections chargées pour la semaine ${currentWeek} (${getWeekKey(currentWeek)}):`, selectionsData)
       } catch (error) {
@@ -163,41 +165,50 @@ export default function PlanningClientPage() {
   }
 
   const handleRemoveMeal = async (dayId: string, mealId: string) => {
+    setIsLoadingMeal(true)
     // Trouver la date correspondant au jour
-    const dayData = meals.find((d) => d.day === dayId)
-    if (!dayData) return
+    try {
+      const dayData = meals.find((d) => d.day === dayId)
+      if (!dayData) return
 
-    // Vérifier si le jour est modifiable (dans le futur)
-    // Pour les administrateurs, utiliser isAdmin=true et passer le currentWeek
-    if (!isDayEditable(dayData.date, true, currentWeek)) {
-      toast.error("Suppression impossible", {
-        description: getDayAvailabilityMessage(dayData.date, true, currentWeek),
-      })
-      return
-    }
+      // Vérifier si le jour est modifiable (dans le futur)
+      // Pour les administrateurs, utiliser isAdmin=true et passer le currentWeek
+      if (!isDayEditable(dayData.date, true, currentWeek)) {
+        toast.error("Suppression impossible", {
+          description: getDayAvailabilityMessage(dayData.date, true, currentWeek),
+        })
+        return
+      }
 
-    // Vérifier si c'est un jour férié
-    if (dayData.isHoliday) {
-      toast.error("Suppression impossible", {
-        description: `Ce jour est férié (${dayData.holidayName})`,
-      })
-      return
-    }
+      // Vérifier si c'est un jour férié
+      if (dayData.isHoliday) {
+        toast.error("Suppression impossible", {
+          description: `Ce jour est férié (${dayData.holidayName})`,
+        })
+        return
+      }
 
-    await removeMeal(dayId, mealId, currentWeek)
-    const updatedMeals = await getWeeklyMealsForWeek(currentWeek)
-    setMeals(updatedMeals)
+      await removeMeal(dayId, mealId, currentWeek)
+      const updatedMeals = await getWeeklyMealsForWeek(currentWeek)
+      setMeals(updatedMeals)
 
-    // Recharger les sélections après suppression
-    const selectionsResponse = await fetch(`/api/selections?weekOffset=${currentWeek}`)
-    if (selectionsResponse.ok) {
-      const selectionsData = await selectionsResponse.json()
+      // Recharger les sélections après suppression
+      const selectionsData = await getAllSelections(currentWeek)
       setUserSelections(selectionsData)
-    }
+      
 
-    toast.success("Repas supprimé", {
-      description: "Le repas a été supprimé avec succès du jour",
-    })
+      toast.success("Repas supprimé", {
+        description: "Le repas a été supprimé avec succès du jour",
+      })
+    } catch (error) {
+      console.error("Erreur lors de la suppression du repas:", error)
+      toast.error("Erreur", {
+        description: "Impossible de supprimer le repas",
+      })
+    } finally {
+      setIsLoadingMeal(false)
+      setIsDeleteDialogOpen(false)
+    }
   }
 
   const confirmEditMeal = async () => {
@@ -208,11 +219,8 @@ export default function PlanningClientPage() {
     setMeals(updatedMeals)
 
     // Recharger les sélections après modification
-    const selectionsResponse = await fetch(`/api/selections?weekOffset=${currentWeek}`)
-    if (selectionsResponse.ok) {
-      const selectionsData = await selectionsResponse.json()
-      setUserSelections(selectionsData)
-    }
+    const selectionsData = await getAllSelections(currentWeek)
+    setUserSelections(selectionsData)
 
     setIsEditDialogOpen(false)
 
@@ -521,7 +529,11 @@ export default function PlanningClientPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => handleRemoveMeal(day.day, meal.id)}
+                                onClick={() => {
+                                  setMealToDelete(meal)
+                                  setDayToDelete(day)
+                                  setIsDeleteDialogOpen(true)
+                                }}
                                 disabled={!isEditable}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -723,6 +735,34 @@ export default function PlanningClientPage() {
             </Button>
             <Button onClick={confirmAddMeal} disabled={!selectedMeal || getUnselectedMeals(selectedDay).length === 0}>
               Ajouter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* Dialogue de suppression du repas */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer le repas</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir supprimer cet repas ? Cette action est irréversible.
+            </DialogDescription>
+          </DialogHeader>
+          {mealToDelete && (
+            <div className="py-4">
+              <p>
+                Vous êtes sur le point de supprimer le repas <strong>{mealToDelete.name}</strong>.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button variant="destructive" onClick={()=>{if (dayToDelete && mealToDelete) handleRemoveMeal(dayToDelete.day, mealToDelete.id)}} disabled={isLoadingMeal || !dayToDelete || !mealToDelete}>
+              { isLoadingMeal ? "Supprimession en cours ..." : "Supprimer" }
             </Button>
           </DialogFooter>
         </DialogContent>
