@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Trash2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import UserHeader from "@/components/user-header"
 import {
@@ -17,6 +17,7 @@ import {
   isDayEditable,
   getDayAvailabilityMessage,
   isThursdayOrLater,
+  deselectMeal,
 } from "@/lib/data"
 import { toast } from "sonner"
 
@@ -41,7 +42,7 @@ export default function UserDashboardClientPage() {
   }, [])
 
   // Utiliser l'ID et le nom de l'utilisateur connecté ou des valeurs par défaut
-  const userId = user?.id || "2"
+  const userId = user?.id || "1"
   const userName = user?.name || "Regular User"
 
   useEffect(() => {
@@ -49,15 +50,11 @@ export default function UserDashboardClientPage() {
     const loadData = async () => {
       setIsLoading(true)
       try {
-        console.log(`Chargement des données pour la semaine ${currentWeek}`)
-
         const weeklyMeals = await getWeeklyMealsForWeek(currentWeek)
         setMeals(weeklyMeals)
-        console.log(`Repas chargés pour la semaine ${currentWeek}:`, weeklyMeals)
 
         const selections = await getUserSelections(userId, currentWeek)
         setUserSelections(selections)
-        console.log(`Sélections chargées pour l'utilisateur ${userId}, semaine ${currentWeek}:`, selections)
       } catch (error) {
         console.error("Error loading data:", error)
         toast.error("Erreur", {
@@ -104,6 +101,28 @@ export default function UserDashboardClientPage() {
     toast.success("Repas sélectionné", {
       description: "Votre choix a été enregistré",
     })
+  }
+
+   const handleDeselectMeal = async (dayId: string) => {
+    if (!user) return
+
+    try {
+      const success = await deselectMeal(user.id, dayId, currentWeek)
+      if (success) {
+        // Rafraîchir les sélections
+        const selections = await getUserSelections(userId, currentWeek)
+        setUserSelections(selections)
+
+        toast.success("Repas désélectionné", {
+          description: "Votre choix a été supprimé",
+        })
+      }
+    } catch (error) {
+      console.error("Erreur lors de la désélection:", error)
+      toast.error("Erreur", {
+        description: "Impossible de supprimer votre sélection",
+      })
+    }
   }
 
   const getUserSelectionForDay = (dayId: string) => {
@@ -193,7 +212,7 @@ export default function UserDashboardClientPage() {
           </Button>
         </div>
 
-        {meals.length > 0 ? (
+        {meals.filter(Boolean).length > 0 ? (
           <Tabs defaultValue={meals[0]?.day} className="w-full">
             <TabsList className="w-full grid grid-cols-5">
               {meals.map((day) => (
@@ -292,6 +311,16 @@ export default function UserDashboardClientPage() {
                           {!isEditable && <span className="ml-2 text-xs text-destructive">(Verrouillé)</span>}
                         </div>
                         <div className="font-medium">{meal.name}</div>
+                        {isEditable && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeselectMeal(day.day)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     )
                   })}

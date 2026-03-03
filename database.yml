@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  database:
+    image: 'postgres:16.3-alpine3.20'
+    container_name: 'goavana-db'
+    ports:
+      - '5432:5432'
+    volumes:
+      - ./db-data/:/var/lib/postgresql/data/
+    networks:
+      - postgres-network
+    environment: 
+      POSTGRES_DB: "mealplanner"
+      POSTGRES_PASSWORD: "admin123"
+    mem_limit: 1g
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: 'pgadmin4'
+    ports:
+      - '5050:80'
+    env_file: .env
+    depends_on:
+      - database
+    networks:
+      - postgres-network
+
+networks:
+  postgres-network:
+    driver: bridge

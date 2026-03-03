@@ -15,38 +15,54 @@ const SessionContext = createContext<SessionContextType | undefined>(undefined)
 
 // Fonction utilitaire pour créer les cookies d'authentification
 const setAuthCookies = (user: any) => {
-  const authToken = btoa(user.email + ":" + user.password)
+  const data = { email: user.email, pwd: user.password, role: user.role }
+  const authToken = btoa(JSON.stringify(data))
   const maxAge = 60 * 60 
 
   document.cookie = `authToken=${authToken};path=/;max-age=${maxAge};SameSite=Strict`
-  document.cookie = `userRole=${user.role};path=/;max-age=${maxAge};SameSite=Strict`
-  document.cookie = `userEmail=${user.email};path=/;max-age=${maxAge};SameSite=Strict`
 }
 
 // Fonction utilitaire pour supprimer les cookies d'authentification
 const clearAuthCookies = () => {
   document.cookie = "authToken=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT"
-  document.cookie = "userRole=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT"
-  document.cookie = `userEmail=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT`
+}
+
+const decodeAuthToken = () => {
+  const cookie = document.cookie
+    .split(";")
+    .find((c) => c.trim().startsWith("authToken="))
+
+  if (!cookie) return null
+
+  try {
+    const authToken = cookie.split("=")[1]
+    const decoded = atob(authToken)
+    const parsedToken = JSON.parse(decoded)
+
+    // Vérifier l'expiration
+    if (parsedToken.exp * 1000 < Date.now()) {
+      return null
+    }
+
+    return parsedToken
+  } catch (error) {
+    console.error("Erreur lors du décodage du token:", error)
+    return null
+  }
 }
 
 // Fonction utilitaire pour vérifier la cohérence entre localStorage et cookies
 const validateAuthState = () => {
   try {
     const storedUser = localStorage.getItem("user")
-    const authToken = document.cookie.split(";").find((row) => row.trim().startsWith("authToken="))
-    const userRole = document.cookie.split(";").find((row) => row.trim().startsWith("userRole="))
-    const userEmail = document.cookie.split(";").find((row) => row.trim().startsWith("userEmail="))
+    const tokenData = decodeAuthToken()
 
-    if (storedUser && authToken && userRole && userEmail) {
-      const user = JSON.parse(storedUser)
-      const expectedRole = userRole.split("=")[1]
+    if (!tokenData) return false
+    if (!storedUser) return false
 
-      // Vérifier que le rôle dans le cookie correspond au rôle de l'utilisateur
-      return user.role === expectedRole
-    }
+    const user = JSON.parse(storedUser)
 
-    return false
+    return tokenData.email === user.email && tokenData.role === user.role
   } catch (error) {
     console.error("Erreur lors de la validation de l'état d'authentification:", error)
     return false

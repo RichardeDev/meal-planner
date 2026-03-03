@@ -17,20 +17,23 @@ import type { User } from "@/lib/data"
 import NotificationIcon from "@/components/notification-icon"
 import AdminNav from "@/components/admin-nav"
 import { LogOut } from "lucide-react"
+import { SessionWarningDialog } from "@/components/session-warning-dialog"
 import { useSession } from "./session-provider"
 
 export default function UserHeader() {
   const router = useRouter()
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
-  const {user, logout } = useSession()
+  const { user, logout } = useSession()
 
   const handleLogoutClick = () => {
     setIsLogoutDialogOpen(true)
   }
 
-  const handleLogout = () => {
+
+  const handleLogoutConfirm = () => {
     setIsLogoutDialogOpen(false)
 
+    // Supprimer l'utilisateur du localStorage
     logout()
 
     toast.success("Déconnexion réussie", {
@@ -77,7 +80,7 @@ export default function UserHeader() {
             <Button variant="outline" onClick={cancelLogout}>
               Annuler
             </Button>
-            <Button variant="destructive" onClick={handleLogout}>
+            <Button variant="destructive" onClick={handleLogoutConfirm}>
               Déconnexion
             </Button>
           </DialogFooter>

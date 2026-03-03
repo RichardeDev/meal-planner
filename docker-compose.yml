@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  meal-planner:
+    container_name: meal-planner
+    image: ${DOCKER_IMAGE_NAME}:${APP_VERSION}
+    ports:
+      - "8040:3000"
+    volumes:
+      - ./public/:/public/
+    restart: unless-stopped
+    mem_limit: 2g
+

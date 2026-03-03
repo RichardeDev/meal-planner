@@ -1,0 +1,117 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(user)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  selections UserSelection[]
+
+  @@map("users")
+}
+
+model PendingUser {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  @@map("pending_users")
+}
+
+model Meal {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  dayMeals    DayMeal[]
+  selections  UserSelection[]
+
+  @@map("meals")
+}
+
+model WeeklyMealsStorage {
+  id       String    @id @default(cuid())
+  weekKey  String    @unique // Format: "2024-W01"
+  data     Json      // Stockage JSON des repas de la semaine
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("weekly_meals_storage")
+}
+
+model DayMeal {
+  id     String @id @default(cuid())
+  day    String // "Lundi", "Mardi", etc.
+  date   String // "15 avril"
+  weekKey String // "2024-W01"
+  
+  // Relations
+  meal   Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  mealId String
+
+  // Informations sur les jours fériés
+  isHoliday   Boolean @default(false)
+  holidayName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([day, weekKey, mealId])
+  @@map("day_meals")
+}
+
+model UserSelection {
+  id         String   @id @default(cuid())
+  weekKey    String   // Format: "2024-W01"
+  weekOffset Int      @default(0)
+  dayId      String   // "Lundi", "Mardi", etc.
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  userName   String   // Dénormalisé pour les performances
+  
+  meal       Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  mealId     String
+
+  @@unique([userId, dayId, weekKey])
+  @@map("user_selections")
+}
+
+model Holiday {
+  id        String   @id @default(cuid())
+  name      String
+  date      DateTime
+  recurring Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("holidays")
+}
+
+enum Role {
+  user
+  admin
+}

@@ -1,13 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { readData, updateData, type User } from "@/lib/json-utils"
+import { getAllUsers, createUser } from "@/lib/prisma-utils"
 import bcrypt from "bcryptjs"
 
 // GET /api/users - Récupérer tous les utilisateurs
 export async function GET(request: NextRequest) {
   try {
-    const data = await readData()
-    return NextResponse.json(data.users)
+    const users = await getAllUsers()
+    return NextResponse.json(users)
   } catch (error) {
+    console.error("Erreur lors de la récupération des utilisateurs:", error)
     return NextResponse.json({ error: "Erreur lors de la récupération des utilisateurs" }, { status: 500 })
   }
 }
@@ -15,32 +16,35 @@ export async function GET(request: NextRequest) {
 // POST /api/users - Créer un nouvel utilisateur
 export async function POST(request: NextRequest) {
   try {
-    const {name, email, password, role} = await request.json()
+    const { name, email, password, role = "user" } = await request.json()
 
     // Validation de base
-    if (!name || !email || !role) {
-      return NextResponse.json({ error: "Données utilisateur incomplètes" }, { status: 400 })
+    if (!name || !email || !password) {
+      return NextResponse.json({ error: "Tous les champs sont requis" }, { status: 400 })
+    }
+
+    // Vérifier si l'email existe déjà
+    const users = await getAllUsers()
+    const existingUser = users.find((user) => user.email === email)
+
+    if (existingUser) {
+      return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 400 })
     }
 
     const hashedPassword = await bcrypt.hash(password, 10)
-    const newUser: User = {
-      id: "",
-      name: name,
-      email: email,
+
+    const newUser = await createUser({
+      name,
+      email,
       password: hashedPassword,
-      role: role
-    }
-
-    await updateData("users", (users) => {
-      // Générer un nouvel ID
-      const newId = (Math.max(...users.map((user) => Number.parseInt(user.id)), 0) + 1).toString()
-      newUser.id = newId
-
-      return [...users, newUser]
+      role,
     })
 
-    return NextResponse.json({user: newUser}, { status: 201 })
+    // Retourner l'utilisateur sans le mot de passe
+    const { password: _, ...userWithoutPassword } = newUser
+    return NextResponse.json({user: userWithoutPassword}, { status: 201 })
   } catch (error) {
+    console.error("Erreur lors de la création de l'utilisateur:", error)
     return NextResponse.json({ error: "Erreur lors de la création de l'utilisateur" }, { status: 500 })
   }
 }

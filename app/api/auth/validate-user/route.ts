@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { readData, updateData } from "@/lib/json-utils"
+import { getPendingUserById, createUser, deletePendingUser } from "@/lib/prisma-utils"
 import { sendEmail } from "@/lib/email-utils"
 
 export async function POST(request: NextRequest) {
@@ -14,36 +14,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "Action invalide" }, { status: 400 })
     }
 
-    const data = await readData()
+    const pendingUser = await getPendingUserById(pendingUserId)
 
-    // Vérifier si pendingUsers existe
-    if (!data.pendingUsers) {
-      data.pendingUsers = []
-    }
-
-    const pendingUserIndex = data.pendingUsers.findIndex((user) => user.id === pendingUserId)
-
-    if (pendingUserIndex === -1) {
+    if (!pendingUser) {
       return NextResponse.json({ message: "Utilisateur en attente non trouvé" }, { status: 404 })
     }
 
-    const pendingUser = data.pendingUsers[pendingUserIndex]
-
     if (action === "approve") {
-      // Générer un nouvel ID pour l'utilisateur
-      const newId = (Math.max(...data.users.map((user) => Number.parseInt(user.id) || 0), 0) + 1).toString()
-
       // Créer un nouvel utilisateur validé
       const newUser = {
-        id: newId,
         name: pendingUser.name,
         email: pendingUser.email,
-        password: pendingUser.password, 
+        password: pendingUser.password,
         role: "user",
       }
 
-      // Ajouter l'utilisateur à la liste des utilisateurs
-      await updateData("users", (users) => [...users, newUser])
+      await createUser(newUser)
 
       // Envoyer un email de confirmation à l'utilisateur
       await sendEmail({
@@ -72,9 +58,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Supprimer l'utilisateur de la liste des utilisateurs en attente
-    await updateData("pendingUsers", (pendingUsers) => pendingUsers?.filter((user) => user.id !== pendingUserId))
+    await deletePendingUser(pendingUserId)
 
-    return NextResponse.json({success:true ,
+    return NextResponse.json({
+      success: true,
       message: action === "approve" ? "Utilisateur validé avec succès" : "Utilisateur rejeté avec succès",
     })
   } catch (error) {

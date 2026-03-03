@@ -1,0 +1,405 @@
+stages:
+  - build
+  - scan_security
+  - deploy
+  - switch_env
+  - healthcheck
+  - notification
+  - rollback
+
+variables:
+  GIT_DEPTH: 0
+  DOCKER_IMAGE_NAME: nicolasakata/meal-planner
+
+#############################USE-DATABASE################################
+
+# -----------------------------
+# Étape 1 : build de l'image et déploiement via Docker Compose et .deploy
+build-db:
+  stage: build
+  image: docker:24.0.7
+  tags: [onpremise]
+  services:
+    - docker:24.0.7-dind
+  script:
+    - export APP_VERSION=$(cat version.txt)
+    - echo "🏗️ Build image Docker préprod..."
+    - echo "📥 Récupération du fichier Dockerfile-db depuis le serveur vers le runner..."
+    - sshpass -p "$SSH_PASSWORD" scp -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST":/srv/meal-planner-preprod/meal-planner/Dockerfile-db .
+    - docker build -f Dockerfile-db -t $DOCKER_IMAGE_NAME:$APP_VERSION .
+    - docker login -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_TOKEN"
+    - docker push $DOCKER_IMAGE_NAME:$APP_VERSION
+  needs:
+    - version
+  artifacts:
+    paths:
+      - version.txt
+  only:
+    - use-database
+
+
+deploy-db:
+  stage: deploy
+  tags: [onpremise]
+  image: alpine
+  script:
+    - export APP_VERSION=$(cat version.txt)
+    - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" > deploy.env
+    - echo "APP_VERSION=$APP_VERSION" >> deploy.env
+    - sshpass -p "$SSH_PASSWORD" scp -o StrictHostKeyChecking=no deploy.env $SSH_USER@$SSH_HOST:/srv/meal-planner-preprod/meal-planner/.deploy
+    - rm deploy.env
+
+    # ✅ Lancer la DB si elle n'est pas encore démarrée
+    - sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
+      "docker compose -f /srv/meal-planner-preprod/meal-planner/database-preprod.yml up -d"
+    # ✅ Pull de l'image de l'application et démarrage
+    - sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
+      "docker compose -f /srv/meal-planner-preprod/meal-planner/docker-compose-preprod.yml --env-file /srv/meal-planner-preprod/meal-planner/.deploy down"
+    - sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
+      "docker compose -f /srv/meal-planner-preprod/meal-planner/docker-compose-preprod.yml --env-file /srv/meal-planner-preprod/meal-planner/.deploy pull"
+    - sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST \
+      "docker compose -f /srv/meal-planner-preprod/meal-planner/docker-compose-preprod.yml --env-file /srv/meal-planner-preprod/meal-planner/.deploy up -d"
+
+    
+  needs: [version, build-db]
+  only:
+    - use-database
+
+# -----------------------------
+# Étape 2 : healthcheck
+# -----------------------------
+healthcheck-db:
+  stage: healthcheck
+  tags: [onpremise]
+  image: curlimages/curl:latest
+  script:
+    - echo "⏳ Vérification préprod..."
+    - sleep 10
+    - curl -sf http://$SSH_HOST:8040 | grep -iq '<!DOCTYPE html>' || { echo "❌ L'application ne répond pas"; exit 1; }
+    - echo "✅ L'application préprod fonctionne"
+    - echo "OK" > .healthcheck.ok
+  needs: [deploy-db]
+  artifacts:
+    paths: [.healthcheck.ok]
+  only:
+    - use-database
+
+# -----------------------------
+# Étape 3 : notification Discord
+# -----------------------------
+notification-db:
+  stage: notification
+  image: debian:bookworm
+  tags:
+    - onpremise
+  before_script:
+    - apt-get update && apt-get install -y curl jq 
+  script:
+    - export APP_VERSION=$(cat version.txt)
+    - |
+      echo "📡 Envoi de la notification Discord..."
+      
+
+      HEALTHCHECK_OK=false
+      if [ -f .healthcheck.ok ]; then HEALTHCHECK_OK=true; fi
+      
+      COMMIT_VERSION=$(cat version.txt 2>/dev/null || echo "non défini")
+      AUTHOR="${GITLAB_USER_NAME:-${CI_COMMIT_AUTHOR:-inconnu}}"
+      AUTHOR=$(echo "$AUTHOR" | sed 's/ <.*>//')
+      COMMIT_ID="${CI_COMMIT_SHORT_SHA:-non défini}" 
+      COMMIT_MESSAGE="${CI_COMMIT_MESSAGE:-Pas de message de commit}"
+
+      echo "📝 Commit : $COMMIT_ID - $COMMIT_MESSAGE"
+      echo "👤 Auteur : $AUTHOR"
+      echo "🔖 Version : $COMMIT_VERSION"
+
+      
+      echo "🔍 Résultat du Healthcheck :"
+
+      if [ "$HEALTHCHECK_OK" = true ]; then
+        MESSAGE="✅ Déploiement réussi pour **$CI_PROJECT_NAME** (branche \`$CI_COMMIT_REF_NAME\`) par **$AUTHOR** — commit \`$COMMIT_ID\` : _${COMMIT_MESSAGE}_. Version déployée : \`$COMMIT_VERSION\`. L'application est **fonctionnelle**."
+      else
+        MESSAGE="❌ Échec du déploiement ou du healthcheck pour **$CI_PROJECT_NAME** (branche \`$CI_COMMIT_REF_NAME\`) par **$AUTHOR** — commit \`$COMMIT_ID\` : _${COMMIT_MESSAGE}_."
+      fi
+
+      echo "📣 Message Discord : $MESSAGE"
+
+      PAYLOAD=$(jq -n --arg content "$MESSAGE" '{content: $content}')
+
+      curl -H "Content-Type: application/json" \
+           -X POST \
+           -d "$PAYLOAD" \
+           "$DISCORD_WEBHOOK_URL"
+      
+  needs:
+      - job: version
+        artifacts: true
+  when: always
+  only:
+    - use-database
+
+#############################USE-DATABASE################################
+
+
+
+
+version:
+  stage: build
+  image: alpine/git
+  tags:
+    - onpremise
+  script:
+    - git fetch --all --tags --prune
+    - COMMIT_COUNT=$(git rev-list --count HEAD)
+    - APP_VERSION="v1.$COMMIT_COUNT.$CI_COMMIT_SHORT_SHA"
+    - echo "$APP_VERSION" > version.txt
+    - echo $APP_VERSION 
+      
+  artifacts:
+    paths:
+      - version.txt
+  only:
+    - develop
+    - use-database
+
+gitleaks_scan:
+  stage: build
+  image: zricethezav/gitleaks:latest
+  tags:
+    - onpremise
+  script:
+    - echo "🔍 Scan Gitleaks en cours..."
+    - gitleaks detect --no-git -v --exit-code 1
+  allow_failure: false
+  only:
+    - develop
+
+build_test_image:
+  stage: build
+  tags:
+    - onpremise
+  image: docker:24.0.7
+  services:
+    - docker:24.0.7-dind
+  script:
+    - echo "📦 Construction de l'image Docker CI localement..."
+    - sshpass -p "$SSH_PASSWORD" scp -o StrictHostKeyChecking=no "$SSH_USER"@"$SSH_HOST":/srv/meal-planner/Dockerfile.ci .
+    - docker build -f Dockerfile.ci -t meal-planner-ci .
+
+  only:
+    - merge_requests
+
+unit_tests:
+  stage: build
+  tags:
+    - onpremise
+  image: docker:24.0.7
+  services:
+    - docker:24.0.7-dind
+  script:
+    - echo "🧪 Lancement des tests unitaires depuis image locale meal-planner-ci...!"
+    
+  needs:
+    - job: build_test_image
+  only:
+    - merge_requests
+
+
+
+
+build:
+  stage: build
+  tags:
+    - onpremise
+  image: docker:24.0.7
+  services:
+    - docker:24.0.7-dind
+  script:
+    - export APP_VERSION=$(cat version.txt)
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+    - echo "🏗️ Préparation du répertoire public pour data.json sur le runner..."
+    - echo "📥 Récupération du fichier data.json depuis le serveur Contabo vers ./public/..."
+    - sshpass -p "$SSH_PASSWORD" scp -o StrictHostKeyChecking=no "$SSH_USER"@"$SSH_HOST":/srv/meal-planner/public/data.json ./public/
+    - echo "✅ Fichier data.json récupéré avec succès dans ./public/."
+    - docker build -t $DOCKER_IMAGE_NAME:$APP_VERSION .
+    - docker push $DOCKER_IMAGE_NAME:$APP_VERSION
+  needs:
+    - version
+  only:
+    - develop
+
+
+    
+scan_security:
+  stage: scan_security
+  image: aquasec/trivy:latest
+  tags: 
+    - onpremise
+  script:
+    - export APP_VERSION=$(cat version.txt)
+    - echo "$DOCKER_IMAGE_NAME:$APP_VERSION"
+    - echo "🔍 Scan de sécurité avec Trivy..."
+    - trivy image --exit-code 1 --severity CRITICAL --scanners vuln $DOCKER_IMAGE_NAME:$APP_VERSION
+    - echo "✅ Aucun problème critique détecté."
+  needs: 
+    - version
+    - build
+  only:
+    - develop
+
+backup_version:
+  stage: deploy
+  image: alpine
+  tags:
+    - onpremise
+  script:
+    - cp version.txt previous_version.txt
+  artifacts:
+    paths:
+      - previous_version.txt
+  needs:
+    - version
+    - build
+  only:
+    - develop
+
+
+deploy:
+  stage: deploy
+  tags: [onpremise]
+  image: alpine
+  script:
+    - export APP_VERSION=$(cat version.txt)
+
+    - export ACTIVE_ENV=$(sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "cat /srv/meal-planner/active_env.txt || echo 'green'")
+
+    
+    - |
+      if [ "$ACTIVE_ENV" = "blue" ]; then
+        export TARGET_ENV="green"
+      else
+        export TARGET_ENV="blue"
+      fi
+
+    - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" > deploy.env
+    - echo "APP_VERSION=$APP_VERSION" >> deploy.env
+
+
+    - sshpass -p "$SSH_PASSWORD" scp -o StrictHostKeyChecking=no deploy.env $SSH_USER@$SSH_HOST:/srv/meal-planner/.deploy
+
+    - rm deploy.env
+  needs: [build, version]
+  only:
+    - develop
+
+
+switch_env:
+  stage: switch_env
+  tags: [onpremise]
+  image: alpine
+  script:
+    - echo "🔁 Bascule vers nouvel environnement (blue/green)..."
+    - sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "bash /srv/meal-planner/switch_env.sh"
+  needs: [deploy]
+  only:
+    - develop
+
+
+healthcheck:
+  stage: healthcheck
+  tags: [onpremise]
+  image: curlimages/curl:latest
+  script:
+    - echo "⏳ Vérification de l'état de l'application..."
+    - sleep 10
+    - export ACTIVE_ENV=$(sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "cat /srv/meal-planner/active_env.txt")
+
+    - |
+      if [ "$ACTIVE_ENV" = "blue" ]; then
+        export APP_PORT=8041
+      else
+        export APP_PORT=8042
+      fi
+
+    - curl -sf http://$SSH_HOST:$APP_PORT | grep -iq '<!DOCTYPE html>' || { echo "❌ L'application ne répond pas sur port $APP_PORT."; exit 1; }
+
+    - echo "✅ L'application répond correctement sur $APP_PORT."
+    - echo "OK" > .healthcheck.ok
+  artifacts:
+    paths: [.healthcheck.ok]
+  needs: [switch_env]
+  allow_failure: false
+  only:
+    - develop
+
+
+
+notification:
+  stage: notification
+  image: curlimages/curl:latest
+  tags:
+    - onpremise
+  script:
+    - export APP_VERSION=$(cat version.txt)
+    - |
+      echo "📡 Envoi de la notification Discord..."
+      
+
+      HEALTHCHECK_OK=false
+      if [ -f .healthcheck.ok ]; then HEALTHCHECK_OK=true; fi
+      
+      COMMIT_VERSION=$(cat version.txt 2>/dev/null || echo "non défini")
+      AUTHOR="${GITLAB_USER_NAME:-${CI_COMMIT_AUTHOR:-inconnu}}"
+      AUTHOR=$(echo "$AUTHOR" | sed 's/ <.*>//')
+      COMMIT_ID="${CI_COMMIT_SHORT_SHA:-non défini}" 
+      COMMIT_MESSAGE="${CI_COMMIT_MESSAGE:-Pas de message de commit}"
+
+      echo "📝 Commit : $COMMIT_ID - $COMMIT_MESSAGE"
+      echo "👤 Auteur : $AUTHOR"
+      echo "🔖 Version : $COMMIT_VERSION"
+
+      
+      echo "🔍 Résultat du Healthcheck :"
+
+      if [ "$HEALTHCHECK_OK" = true ]; then
+        MESSAGE="✅ Déploiement réussi pour **$CI_PROJECT_NAME** (branche \`$CI_COMMIT_REF_NAME\`) par **$AUTHOR** — commit \`$COMMIT_ID\` : _${COMMIT_MESSAGE}_. Version déployée : \`$COMMIT_VERSION\`. L'application est **fonctionnelle**."
+      else
+        MESSAGE="❌ Échec du déploiement ou du healthcheck pour **$CI_PROJECT_NAME** (branche \`$CI_COMMIT_REF_NAME\`) par **$AUTHOR** — commit \`$COMMIT_ID\` : _${COMMIT_MESSAGE}_."
+      fi
+
+      echo "📣 Message Discord : $MESSAGE"
+
+      curl -H "Content-Type: application/json" \
+           -X POST \
+           -d "{\"content\": \"$MESSAGE\"}" \
+           "$DISCORD_WEBHOOK_URL"
+
+  needs:
+      - job: switch_env
+      - job: healthcheck
+        artifacts: true
+      - job: version
+        artifacts: true
+  when: always
+  allow_failure: true
+  only:
+    - develop
+
+rollback:
+  stage: rollback
+  tags:
+    - onpremise
+  image: alpine
+  script:
+      - export APP_VERSION=$(cat previous_version.txt)
+      - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" > deploy.env
+      - echo "APP_VERSION=$APP_VERSION" >> deploy.env
+      - sshpass -p "$SSH_PASSWORD" scp -o StrictHostKeyChecking=no deploy.env $SSH_USER@$SSH_HOST:/srv/meal-planner/.deploy
+      - sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "bash /srv/meal-planner/switch_env.sh"
+  needs:
+    - backup_version
+    - healthcheck
+  when: on_failure
+  only:
+    - develop
+

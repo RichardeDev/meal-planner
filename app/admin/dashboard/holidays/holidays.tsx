@@ -34,6 +34,7 @@ import { deleteHoliday, getHolidays, postHoliday } from "@/lib/data"
 export default function HolidaysClientPage() {
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingDelete, setIsLoadingDelete] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [holidayToDelete, setHolidayToDelete] = useState<Holiday | null>(null)
@@ -136,6 +137,7 @@ export default function HolidaysClientPage() {
   
 const handleDeleteHoliday = async (): Promise<void> => {
   if (!holidayToDelete) return
+  setIsLoadingDelete(true)
 
   try {
     // Appel via `callApi()` via votre librairie
@@ -156,6 +158,8 @@ const handleDeleteHoliday = async (): Promise<void> => {
     toast.error("Erreur", {
       description: error instanceof Error ? error.message : "Impossible de supprimer ce jour férié",
     })
+  } finally {
+    setIsLoadingDelete(false)
   }
 }
 
@@ -442,8 +446,8 @@ const handleDeleteHoliday = async (): Promise<void> => {
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
               Annuler
             </Button>
-            <Button variant="destructive" onClick={handleDeleteHoliday}>
-              Supprimer
+            <Button variant="destructive" onClick={handleDeleteHoliday} disabled={isLoadingDelete}>
+              {isLoadingDelete ? "Suppression en cours..." : "Supprimer"}
             </Button>
           </DialogFooter>
         </DialogContent>

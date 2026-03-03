@@ -29,8 +29,8 @@ export default function LoginClientPage() {
     setIsLoading(true)
 
     try {
-      const user = await getUserLogin(email)
-      if (user && user.password && bcrypt.compareSync(password, user.password)) {
+      const user = await getUserLogin(email, password)
+      if (user) {
         login({
           id: user.id,
           name: user.name,
@@ -38,15 +38,15 @@ export default function LoginClientPage() {
           role: user.role,
         })
 
-        toast.success("Connexion réussie", {
-          description: `Bienvenue, ${user.name}!`,
-        })
-
         if (user.role === "admin") {
           router.push("/admin/dashboard/planning")
         } else {
           router.push("/user/dashboard")
         }
+
+        toast.success("Connexion réussie", {
+          description: `Bienvenue, ${user.name}!`,
+        })
       } else {
         toast.error("Erreur de connexion", {
           description: "Email ou mot de passe incorrect",

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { readData, updateData, type PendingUser } from "@/lib/json-utils"
+import { getAllUsers, createUser, getAllPendingUsers, createPendingUser } from "@/lib/prisma-utils"
 import { sendEmail } from "@/lib/email-utils"
 import bcrypt from "bcryptjs"
 
@@ -15,25 +15,23 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Vérifier si l'email existe déjà
-    const data = await readData()
+    const users = await getAllUsers()
 
-    if (data.users.length === 0) {
-      const newId = (Math.max(...data.users.map((user) => Number.parseInt(user.id) || 0), 0) + 1).toString()
-
+    if (users.length === 0) {
       const newUser = {
-        id: newId,
         name: name,
         email: email,
-        password: hashedPassword, 
+        password: hashedPassword,
         role: "admin",
       }
 
-      await updateData("users", (users) => [...users, newUser])
+      await createUser(newUser)
       return NextResponse.json({ message: "Premier administrateur créé avec succès" }, { status: 201 })
     }
 
-    const existingUser = data.users.find((user) => user.email === email)
-    const existingPendingUser = data.pendingUsers?.find((user) => user.email === email)
+    const existingUser = users.find((user) => user.email === email)
+    const pendingUsers = await getAllPendingUsers()
+    const existingPendingUser = pendingUsers.find((user) => user.email === email)
 
     if (existingUser) {
       return NextResponse.json({ message: "Cet email est déjà utilisé" }, { status: 400 })
@@ -46,23 +44,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const newPendingUser: PendingUser = {
-      id: `pending_${Date.now()}`,
+    const newPendingUser = {
       name,
       email,
-      password: hashedPassword, 
-      role: "user", 
-      createdAt: new Date().toISOString(),
+      password: hashedPassword,
+      role: "user",
     }
 
-    if (!data.pendingUsers) {
-      data.pendingUsers = []
-    }
+    await createPendingUser(newPendingUser)
 
-    data.pendingUsers.push(newPendingUser)
-    await updateData("pendingUsers", () => data.pendingUsers || [])
-
-    const adminUsers = data.users.filter((user) => user.role === "admin")
+    const adminUsers = users.filter((user) => user.role === "admin")
     for (const admin of adminUsers) {
       await sendEmail({
         to: admin.email,

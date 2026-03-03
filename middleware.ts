@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl
 
-  const publicRoutes = ["/api/auth/login", "/api/auth/signup"]
+  const publicRoutes = ["/api/auth/login", "/api/auth/signup", "/api/selections"]
   if (publicRoutes.some((route) => url.pathname.startsWith(route))) {
     return NextResponse.next()
   } 
@@ -13,23 +13,26 @@ export async function middleware(request: NextRequest) {
   const isAdminPage = url.pathname.startsWith("/admin")
   const isUserPage = url.pathname.startsWith("/user")
 
-  if (isAdminPage) {
-    const emailCookie = request.cookies.get("userEmail")?.value
-    const userRole = await get_user_role(emailCookie)
+  const authToken = request.cookies.get("authToken")?.value
+  console.log(`Your authToken: ${authToken}`)
 
-    if (!request.cookies.get("authToken")?.value) {
+  if (isAdminPage) {
+
+    if (!authToken) {
       url.pathname = "/login"
       url.searchParams.set("redirect", request.nextUrl.pathname)
       return NextResponse.redirect(url)
     }
+    
+    const decodedToken = JSON.parse(Buffer.from(authToken, "base64").toString("utf-8"))
 
-    if (userRole !== "admin") {
+    if (decodedToken.role !== "admin") {
       return NextResponse.redirect(new URL("/user/dashboard", request.url))
     }
   }
 
   if (isUserPage && !isAdminPage) {
-    if (!request.cookies.get("authToken")?.value) {
+    if (!authToken) {
       url.pathname = "/login"
       url.searchParams.set("redirect", request.nextUrl.pathname)
       return NextResponse.redirect(url)
@@ -81,31 +84,6 @@ function unauthorizedResponse() {
       },
     }
   )
-}
-
-async function get_user_role(emailCookie?:string) {
-  if (!emailCookie) {
-    return NextResponse.json({ error: "Email non trouvé" }, { status: 400 })
-  }
-
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/users/${encodeURIComponent(emailCookie)}`, {
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${process.env.API_USER}:${process.env.API_PASSWORD}`).toString("base64")}`,
-      },
-    })
-
-    if (!response.ok) {
-      return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 401 })
-    }
-
-    const userData = await response.json()
-
-    return userData.role
-  } catch (error) {
-    console.error("Erreur lors de la récupération du rôle utilisateur:", error)
-    return NextResponse.json({ error: "Échec de l'authentification" }, { status: 500 })
-  }
 }
 
 

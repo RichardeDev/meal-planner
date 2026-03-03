@@ -73,12 +73,10 @@ export default function PlanningClientPage() {
     const loadWeeklyMeals = async () => {
       setIsLoading(true)
       try {
-        console.log(`Chargement des données pour la semaine ${currentWeek}`)
 
         // Charger les repas de la semaine
         const weekMeals = await getWeeklyMealsForWeek(currentWeek)
         setMeals(weekMeals)
-        console.log("Repas chargés:", weekMeals)
 
         // Si la semaine change, sélectionner le premier jour par défaut
         if (weekMeals.length > 0) {
@@ -92,7 +90,6 @@ export default function PlanningClientPage() {
         // Charger les sélections des utilisateurs pour cette semaine spécifique
         const selectionsData = await getAllSelections(currentWeek)
         setUserSelections(selectionsData)
-        console.log(`Sélections chargées pour la semaine ${currentWeek} (${getWeekKey(currentWeek)}):`, selectionsData)
       } catch (error) {
         console.error("Erreur lors du chargement des repas:", error)
         toast.error("Erreur", {
@@ -463,7 +460,7 @@ export default function PlanningClientPage() {
             <CardDescription>Modifiez, ajoutez ou supprimez des repas pour chaque jour</CardDescription>
           </CardHeader>
           <CardContent>
-            {meals.length > 0 ? (
+            {meals.filter(Boolean).length > 0 ? (
               <Tabs defaultValue={meals[0]?.day} className="w-full" onValueChange={handleViewSelections}>
                 <TabsList className="w-full grid grid-cols-5">
                   {meals.map((day) => (

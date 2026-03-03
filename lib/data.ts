@@ -11,10 +11,13 @@ import { callApi } from "./utils";
 // Fonctions d'API pour les utilisateurs
 
 
-export async function getUserLogin(email: string): Promise<User | undefined> {
+export async function getUserLogin(email: string, password: string): Promise<User | undefined> {
   try {
     const encodedEmail = encodeURIComponent(email)
-    const data = await callApi<Promise<User>>(`/api/auth/login/${encodedEmail}`)
+    const data = await callApi<Promise<User>>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    })
     return data
   } catch (error) {
     console.error("Erreur lors de la récupération de l'utilisateur par email:", error)
@@ -58,6 +61,7 @@ export async function addNewUser(name: string, email: string, password: string, 
       method: "POST",
       body: JSON.stringify({name, email, password, role}),
     })
+    console.log("response : ", response)
 
     if (!response.user) {
       throw new Error("Aucun utilisateur retourné")
@@ -282,6 +286,24 @@ export async function selectMeal(
     return response.success
   } catch (error) {
     console.error("Erreur lors de la sélection du repas:", error)
+    return false
+  }
+}
+
+export async function deselectMeal(
+  userId: string,
+  dayId: string,
+  weekOffset = 0
+): Promise<boolean> {
+  try {
+    const response = await callApi<{ success: boolean }>("/api/selections", {
+      method: "DELETE",
+      body: JSON.stringify({ userId, dayId, weekOffset }),
+    })
+
+    return response.success
+  } catch (error) {
+    console.error("Erreur lors de la suppression de la sélection:", error)
     return false
   }
 }
